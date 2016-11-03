@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -31,6 +32,7 @@ import (
 	"chain/core/mockhsm"
 	"chain/core/pin"
 	"chain/core/query"
+	"chain/core/raft"
 	"chain/core/rpc"
 	"chain/core/txbuilder"
 	"chain/core/txdb"
@@ -69,6 +71,8 @@ var (
 	rpsToken      = env.Int("RATELIMIT_TOKEN", 0)       // reqs/sec
 	rpsRemoteAddr = env.Int("RATELIMIT_REMOTE_ADDR", 0) // reqs/sec
 	indexTxs      = env.Bool("INDEX_TRANSACTIONS", true)
+	dir           = env.String("DIR", defaultDir())
+	bootURL       = env.String("BOOTURL", "")
 
 	// build vars; initialized by the linker
 	buildTag    = "dev"
@@ -110,6 +114,12 @@ func main() {
 	ctx := context.Background()
 	env.Parse()
 
+	raftDir := filepath.Join(*dir, "raft") // TODO(kr): better name for this
+	raftDB, err := raft.Start(*listenAddr, raftDir, *bootURL)
+	if err != nil {
+		chainlog.Fatal(ctx, chainlog.KeyError, err)
+	}
+
 	sql.EnableQueryLogging(*logQueries)
 	db, err := sql.Open("hapg", *dbURL)
 	if err != nil {
@@ -147,10 +157,11 @@ func main() {
 
 	var h http.Handler
 	if conf != nil {
-		h = launchConfiguredCore(ctx, db, conf, processID)
+		h = launchConfiguredCore(ctx, raftDB, db, conf, processID)
 	} else {
 		chainlog.Messagef(ctx, "Launching as unconfigured Core.")
 		h = &core.Handler{
+			RaftDB:       raftDB,
 			DB:           db,
 			AltAuth:      authLoopbackInDev,
 			AccessTokens: &accesstoken.CredentialStore{DB: db},
@@ -199,7 +210,7 @@ func main() {
 	}
 }
 
-func launchConfiguredCore(ctx context.Context, db *sql.DB, conf *config.Config, processID string) http.Handler {
+func launchConfiguredCore(ctx context.Context, raftDB *raft.Service, db *sql.DB, conf *config.Config, processID string) http.Handler {
 	var remoteGenerator *rpc.Client
 	if !conf.IsGenerator {
 		remoteGenerator = &rpc.Client{
@@ -428,4 +439,9 @@ func (w *errlog) Write(p []byte) (int, error) {
 		w.t = time.Now()
 	}
 	return len(p), nil // report success for the MultiWriter
+}
+
+func defaultDir() string {
+	// TODO(kr): something in ~/Library on darwin?
+	return filepath.Join(os.Getenv("HOME"), ".cored")
 }
