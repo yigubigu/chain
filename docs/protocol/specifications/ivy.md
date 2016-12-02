@@ -15,17 +15,44 @@ Multiline comments begin with `/*` and stop with `*/`. Multiline comments must c
 
 Comments are treated as a line break.
 
+### Keywords
+
+These keywords are reserved and may not be used as identifiers:
+
+```
+program
+path
+verify
+let
+```
+
+### Function Names
+
+These function names are predefined and may not be bound to values:
+
+```
+checkSig
+```
+
 ### Identifier
 
 ```
 identifier = [A-Za-z]+
 ```
 
+### Delimiter
+
+```
+delimiter = "["|"]"|"("|")"|"{"|"}"|";"|","
+```
+
 #### Integer Literal
 
 ```
-integer_literal = [0-9]+
+integer_literal = (-)?[0-9]+
 ```
+
+A literal representing an [integer](#bytestring).
 
 #### Hex Literal
 
@@ -34,9 +61,33 @@ hex_digit   = [0-9] | [a-f]
 hex_literal = "0x" (hex_digit hex_digit)*
 ```
 
+A literal representing a [bytestring](#bytestring).
+
+For example, `0x` represents an empty bytestring, and `0xffff` represents a bytestring of two bytes, each of which would be represented as `11111111` in binary.
+
+Hex literals must have an even number of nibs (i.e., `0xf` is not a valid bytestring literal).
+
+### Boolean Literal
+
+`boolean_literal = "true" | "false"`
+
+A literal representing a [boolean](#boolean).
+
 ## Values
 
-TBD: coercion between strings, numbers, booleans
+There are three types of values: bytestrings, integers, and booleans.
+
+### Bytestring
+
+A sequence of 0 or more bytes.
+
+### Integer
+
+An integer between -2^63 and 2^63 - 1, inclusive.
+
+### Boolean
+
+Either `true` or `false`.
 
 ## Expressions
 
@@ -46,9 +97,11 @@ TBD: Precedence
 
 ### Literal Expression
 
-`literal_expression = integer_literal | hex_literal`
+`literal_expression = integer_literal | hex_literal | boolean_literal`
 
 Literal expressions evaluate to the literal value they represent.
+
+If an integer literal does not represent a valid integer value (i.e., the value is not within the range -2^63 and 2^63 - 1, inclusive), compilation fails with an error.
 
 ### Variable
 
@@ -64,14 +117,22 @@ If the identifier is not bound to any value in the current scope, compilation fa
 
 ```
 expression_list = expression ("," expression_list)?
-function_call   = name:identifier "(" expression_list ")"
+function_call   = name:identifier "(" arguments:expression_list? ")"
 ```
+
+If the named function is not a defined function and is not in the scope, 
 
 ### Unary Operation
 
 ```
 unary_operator  = "!"|"-"
 unary_operation = unary_operator expression
+```
+
+### Slice Operation
+
+```
+slice_operation = expression "[" start:expression ":" end:expression "]"
 ```
 
 ### Binary Operation
