@@ -26,13 +26,38 @@ verify
 let
 ```
 
-### Function Names
+### Predefined Names
 
-These function names are predefined and may not be bound to values:
+These identifiers are predefined as functions and may not be bound to values:
 
 ```
+abs
+min
+max
+within
+sha256
+sha3
 checkSig
+checkMultisig
 ```
+
+These names are predefined as values:
+
+```
+tx.mintime
+tx.maxtime
+tx.hash
+tx.currentInput.index
+tx.currentInput.amount
+tx.currentInput.asset
+tx.currentInput.program
+tx.currentInput.refDataHash
+tx.outputs
+```
+
+`.` is not a delimiter. It may only be used in these predefined names.
+
+Additionally, the identifier `tx` may not be bound to any value.
 
 ### Identifier
 
@@ -43,7 +68,7 @@ identifier = [A-Za-z]+
 ### Delimiter
 
 ```
-delimiter = "["|"]"|"("|")"|"{"|"}"|";"|","
+delimiter = "[" | "]" | "(" | ")" | "{" | "}" | ";" | ","
 ```
 
 #### Integer Literal
@@ -125,7 +150,7 @@ If the named function is not a defined function and is not in the scope,
 ### Unary Operation
 
 ```
-unary_operator  = "!"|"-"
+unary_operator  = "!"|"-"|"~"
 unary_operation = unary_operator expression
 ```
 
@@ -138,8 +163,8 @@ slice_operation = expression "[" start:expression ":" end:expression "]"
 ### Binary Operation
 
 ```
-binary_operator  = "+"|"-"|"&&"|"||"|"=="/"!="/">"/"<"/">="/"<="
-binary_operator = unary_operator expression
+binary_operator  = "+" | "-" | "&&" | "||" | "==" | "!=" | ">" | "<" | ">=" | "<=" | "&" | "|" | "^" | "%" | "<<" | ">>"
+binary_operator = binary_operator expression
 ```
 
 ## Statement
