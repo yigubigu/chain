@@ -170,6 +170,17 @@ func Start(laddr, dir, bootURL string) (*Service, error) {
 
 	if walobj != nil {
 		sv.raftNode = raft.RestartNode(c)
+	} else if bootURL != "" {
+		log.Write(ctx, "raftid", c.ID)
+		err = writeID(sv.dir, c.ID)
+		if err != nil {
+			return nil, err
+		}
+		walobj, err = wal.Create(sv.walDir(), nil)
+		if err != nil {
+			return nil, errors.Wrap(err)
+		}
+		sv.raftNode = raft.RestartNode(c)
 	} else {
 		log.Write(ctx, "raftid", c.ID)
 		err = writeID(sv.dir, c.ID)
@@ -180,11 +191,7 @@ func Start(laddr, dir, bootURL string) (*Service, error) {
 		if err != nil {
 			return nil, errors.Wrap(err)
 		}
-		initPeers := []raft.Peer{{ID: 1, Context: []byte(laddr)}}
-		if sv.id != 1 {
-			initPeers = nil
-		}
-		sv.raftNode = raft.StartNode(c, initPeers)
+		sv.raftNode = raft.StartNode(c, []raft.Peer{{ID: 1, Context: []byte(laddr)}})
 	}
 
 	go sv.runUpdates(walobj)
