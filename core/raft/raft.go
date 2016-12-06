@@ -163,6 +163,7 @@ func Start(laddr, dir, bootURL string) (*Service, error) {
 		ElectionTick:    10,
 		HeartbeatTick:   1,
 		Storage:         sv.raftStorage,
+		Applied:         sv.appliedIndex,
 		MaxSizePerMsg:   4096,
 		MaxInflightMsgs: 256,
 	}
