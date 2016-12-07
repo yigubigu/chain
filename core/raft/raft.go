@@ -333,7 +333,6 @@ func (sv *Service) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 }
 
 func (sv *Service) serveMsg(w http.ResponseWriter, req *http.Request) {
-	log.Write(req.Context(), "at", "servemsg")
 	b, err := ioutil.ReadAll(http.MaxBytesReader(w, req.Body, maxRaftReqSize))
 	if err != nil {
 		http.Error(w, "cannot read req: "+err.Error(), 400)
@@ -345,7 +344,6 @@ func (sv *Service) serveMsg(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "cannot unmarshal: "+err.Error(), 400)
 		return
 	}
-	log.Write(req.Context(), "at", "servemsgstep", "m", m)
 	sv.raftNode.Step(req.Context(), m)
 }
 
