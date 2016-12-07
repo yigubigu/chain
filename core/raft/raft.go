@@ -660,10 +660,14 @@ func readID(dir string) (uint64, error) {
 	if len(d) != 12 {
 		return 0, errors.New("bad id file size")
 	}
+	id := binary.BigEndian.Uint64(d)
+	if id == 0 {
+		return 0, errors.New("invalid id")
+	}
 	if crc32.Checksum(d[:8], crcTable) != binary.BigEndian.Uint32(d[8:]) {
 		return 0, fmt.Errorf("bad CRC in member id %x", d)
 	}
-	return binary.BigEndian.Uint64(d), nil
+	return id, nil
 }
 
 func writeID(dir string, id uint64) error {
