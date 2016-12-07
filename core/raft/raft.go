@@ -37,9 +37,8 @@ import (
 // of consensus participants.)
 
 const (
-	//tickDur        = 100 * time.Millisecond
-	tickDur        = 2 * time.Second // TODO(kr): put this back to 100ms
-	maxRaftReqSize = 10e6            // 10MB
+	tickDur        = 100 * time.Millisecond
+	maxRaftReqSize = 10e6 // 10MB
 	snapCount      = 10000
 
 	nSnapCatchupEntries uint64 = 10000
