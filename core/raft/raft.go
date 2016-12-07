@@ -203,6 +203,8 @@ func Start(laddr, dir, bootURL string) (*Service, error) {
 // Note that it is possible to recover from some errors
 // returned by Err.
 func (sv *Service) Err() error {
+	sv.errMu.Lock()
+	defer sv.errMu.Unlock()
 	return sv.err
 }
 
