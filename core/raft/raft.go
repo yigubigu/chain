@@ -573,10 +573,12 @@ func (sv *Service) send(msgs []raftpb.Message) error {
 
 // best effort. if it fails, oh well -- that's why we're using raft.
 func sendmsg(addr string, data []byte) {
-	_, err := http.Post("http://"+addr+"/raft/msg", contentType, bytes.NewReader(data))
+	resp, err := http.Post("http://"+addr+"/raft/msg", contentType, bytes.NewReader(data))
 	if err != nil {
 		log.Error(context.Background(), err)
+		return
 	}
+	defer resp.Body.Close()
 }
 
 // recover loads state from the last full snapshot,
