@@ -26,6 +26,7 @@ import (
 	"github.com/coreos/etcd/wal"
 	"github.com/coreos/etcd/wal/walpb"
 
+	"chain/core/raft/state"
 	"chain/errors"
 	"chain/log"
 )
@@ -68,27 +69,15 @@ type Service struct {
 	raftNode    raft.Node
 	raftStorage *raft.MemoryStorage
 
-	// The actual replicated data set
-	// and its current log position.
-	// TODO(kr): maybe merge this with raftStorage to save memory?
-	// TODO(kr): what data type should we really use?
+	// The actual replicated data set.
 	stateMu sync.Mutex
-	state   map[string]string
-	peers   map[uint64]string // id -> addr
-	// TODO(kr): figure out synchronization for peers (should it even be under stateMu?)
-	// ...also, do we need to replicate it along with the snapshot?
+	state   state.State
 
+	// Current log position.
 	// access only from runUpdates goroutine
 	appliedIndex uint64
 	snapIndex    uint64
 	confState    raftpb.ConfState
-}
-
-// We need to persist and restore the peer address list,
-// not just the application state.
-type snapshot struct {
-	State map[string]string // matches Service.state
-	Peers map[uint64]string // matches Service.peers
 }
 
 // Getter gets a value from a key-value store.
@@ -128,7 +117,6 @@ func Start(laddr, dir, bootURL string) (*Service, error) {
 
 	sv := &Service{
 		dir:         dir,
-		peers:       make(map[uint64]string),
 		mux:         http.NewServeMux(),
 		raftStorage: raft.NewMemoryStorage(),
 	}
@@ -154,7 +142,6 @@ func Start(laddr, dir, bootURL string) (*Service, error) {
 	} else {
 		// brand new cluster!
 		sv.id = 1
-		sv.state = make(map[string]string)
 	}
 
 	c := &raft.Config{
@@ -289,9 +276,7 @@ const (
 // If successful, it returns after the value is committed to
 // the raft log.
 func (sv *Service) Set(ctx context.Context, key, val string) error {
-	// TODO(kr): make a way to delete things
-	// TODO(kr): we prob need other operations too, like conditional writes
-	b, _ := json.Marshal(map[string]string{key: val}) // error can't happen
+	b := state.Set(key, val)
 	prop := make([]byte, 1+len(b))
 	copy(prop[1:], b)
 
@@ -434,18 +419,12 @@ func (sv *Service) join(addr, baseURL string) error {
 	ctx := context.Background()
 	sv.raftStorage.ApplySnapshot(raftSnap)
 	if raft.IsEmptySnap(raftSnap) {
-		sv.state = make(map[string]string)
 		log.Write(ctx, "at", "joined", "appliedindex", 0, "msg", "(empty snap)")
 	} else {
-		var snap snapshot
-		// TODO(kr): figure out a better snapshot encoding
-		err = json.Unmarshal(raftSnap.Data, &snap)
+		err = sv.state.RestoreSnapshot(raftSnap.Data)
 		if err != nil {
 			return errors.Wrap(err)
 		}
-		log.Messagef(ctx, "decoded snapshot %#v", snap)
-		sv.state = snap.State
-		sv.peers = snap.Peers
 		sv.confState = raftSnap.Metadata.ConfState
 		sv.snapIndex = raftSnap.Metadata.Index
 		sv.appliedIndex = raftSnap.Metadata.Index
@@ -506,7 +485,7 @@ func (sv *Service) applyEntry(ent raftpb.Entry) error {
 				"addr", string(cc.Context),
 			)
 			sv.stateMu.Lock()
-			sv.peers[cc.NodeID] = string(cc.Context)
+			sv.state.SetPeerAddr(cc.NodeID, string(cc.Context))
 			sv.stateMu.Unlock()
 		case raftpb.ConfChangeRemoveNode:
 			if cc.NodeID == sv.id {
@@ -527,20 +506,8 @@ func (sv *Service) applyEntry(ent raftpb.Entry) error {
 		}
 		switch ent.Data[0] {
 		case propWrite:
-			var appEntry map[string]string
-			err := json.Unmarshal(ent.Data[1:], &appEntry)
-			if err != nil {
-				// An error here indicates a malformed update
-				// was written to the raft log. We do version
-				// negotiation in the transport layer, so this
-				// should be impossible; by this point, we are
-				// all speaking the same version.
-				return errors.Wrap(err)
-			}
 			sv.stateMu.Lock()
-			for k, v := range appEntry {
-				sv.state[k] = v
-			}
+			sv.state.Apply(ent.Data[1:])
 			sv.stateMu.Unlock()
 		case propRead:
 			// nothing
@@ -560,9 +527,9 @@ func (sv *Service) send(msgs []raftpb.Message) error {
 			return errors.Wrap(err)
 		}
 		sv.stateMu.Lock()
-		addr, ok := sv.peers[msg.To]
+		addr := sv.state.GetPeerAddr(msg.To)
 		sv.stateMu.Unlock()
-		if !ok {
+		if addr == "" {
 			log.Write(context.Background(), "no-addr-for-peer", msg.To)
 			continue
 		}
@@ -622,16 +589,11 @@ func (sv *Service) recover() (*wal.WAL, error) {
 
 	sv.raftStorage.ApplySnapshot(raftSnap)
 	if raft.IsEmptySnap(raftSnap) {
-		sv.state = make(map[string]string)
 	} else {
-		var snap snapshot
-		// TODO(kr): figure out a better snapshot encoding
-		err = json.Unmarshal(raftSnap.Data, &snap)
+		err = sv.state.RestoreSnapshot(raftSnap.Data)
 		if err != nil {
 			return nil, errors.Wrap(err)
 		}
-		sv.state = snap.State
-		sv.peers = snap.Peers
 		sv.confState = raftSnap.Metadata.ConfState
 		sv.snapIndex = raftSnap.Metadata.Index
 		sv.appliedIndex = raftSnap.Metadata.Index
@@ -650,13 +612,9 @@ func (sv *Service) recover() (*wal.WAL, error) {
 }
 
 func (sv *Service) getSnapshot() (*raftpb.Snapshot, error) {
-	// TODO(kr): figure out a better snapshot encoding
 	sv.stateMu.Lock()
-	v := snapshot{sv.state, sv.peers}
+	data, err := sv.state.Snapshot()
 	sv.stateMu.Unlock()
-	ctx := context.Background()
-	log.Messagef(ctx, "encoding snapshot %#v", v)
-	data, err := json.Marshal(v)
 	if err != nil {
 		return nil, errors.Wrap(err)
 	}
@@ -740,5 +698,5 @@ type staleGetter Service
 func (g *staleGetter) Get(key string) string {
 	g.stateMu.Lock()
 	defer g.stateMu.Unlock()
-	return g.state[key]
+	return g.state.Get(key)
 }
