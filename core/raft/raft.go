@@ -723,21 +723,15 @@ func (sv *Service) snapFile() string { return filepath.Join(sv.dir, "snap") }
 // It reports any errors encountered using sv.Error.
 // It must be called nowhere but runUpdates.
 func (sv *Service) redo(f func() error) {
-	var n uint
-	for {
+	for n := uint(0); ; n++ {
 		err := f()
-		if err != nil {
-			sv.errMu.Lock()
-			sv.err = err
-			sv.errMu.Unlock()
-			n++
-			time.Sleep(100*time.Millisecond + time.Millisecond<<n)
-		} else {
-			sv.errMu.Lock()
-			sv.err = nil
-			sv.errMu.Unlock()
+		sv.errMu.Lock()
+		sv.err = err
+		sv.errMu.Unlock()
+		if err == nil {
 			break
 		}
+		time.Sleep(100*time.Millisecond + time.Millisecond<<n)
 	}
 }
 
