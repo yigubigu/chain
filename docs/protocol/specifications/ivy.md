@@ -23,6 +23,7 @@ These keywords are reserved and may not be used as identifiers:
 program
 path
 verify
+satisfy
 let
 ```
 
@@ -41,34 +42,25 @@ checkSig
 checkMultisig
 ```
 
-These names are predefined as values:
+These names are predefined as values and may not be reassigned:
 
 ```
-tx.mintime
-tx.maxtime
-tx.hash
-tx.currentInput.index
-tx.currentInput.amount
-tx.currentInput.asset
-tx.currentInput.program
-tx.currentInput.refDataHash
-tx.outputs
+tx
+block
 ```
-
-`.` is not a delimiter. It may only be used in these predefined names.
-
-Additionally, the identifier `tx` may not be bound to any value.
 
 ### Identifier
 
 ```
-identifier = [A-Za-z]+
+identifier = [A-Za-z_]+
 ```
+
+Other than [keywords](#keywords) and [predefined names](#predefined-names), any sequence of uppercase and lowercase letters and/or underscores is considered an identifier.
 
 ### Delimiter
 
 ```
-delimiter = "[" | "]" | "(" | ")" | "{" | "}" | ";" | ","
+delimiter = "[" | "]" | "(" | ")" | "{" | "}" | ";" | "," | "."
 ```
 
 #### Integer Literal
@@ -177,6 +169,14 @@ binary_operator = binary_operator expression
 
 To execute an assertion, evaluate the expression. If the expression evaluates to a truthy value, execution of the program continues. If the expression evaluates to a falsy value, execution of the program fails.
 
+### Satisfaction
+
+`assertion = "satisfy" (instantiated_program | identifier)`
+
+If an identifier is provided, and that identifier is not bound to an instantiated program in the current scope, compilation fails with an error.
+
+TBD: explain
+
 ### Assignment
 
 `assignment = "let" identifier "=" expression`
@@ -234,13 +234,38 @@ The caller also specifies _path arguments_—values for each of the _path parame
 
 ## Program
 
-```
-program = "program" name:identifier "(" parameters:identifier_list ")" block:block
-```
-
 Programs must be _instantiated_ before they can be executed.
 
-When a program is instantiated, the instantiator must provide _program arguments_—values to be assigned to each of its parameters. 
+To execute an instantiated program, execute its block with each of the identifiers bound to the values that were provided at instantiation time.
 
-To executing a program, execute its block with each of the identifiers bound to the values that were provided at instantiation time.
+### Program Definition
 
+```
+program_definition = "program" name:identifier "(" parameters:identifier_list? ")" block:block
+```
+
+A program definition binds the specified name to a block (and a list of parameters).
+
+
+### Program Instantiation
+
+```
+instantiated_program = program_name:identifier "(" arguments:expression_list? ")"
+```
+
+To instantiate a program, evaluate each of the expressions in the arguments, and, in the scope of the instantiated program's block, bind those values to their corresponding parameters.
+
+If the number of arguments does not match the number of parameters, compilation fails with an error.
+
+To execute a program, execute its block with each of the identifiers bound to the values that were provided at instantiation time.
+
+## Structs
+
+### Struct Definition
+
+```
+type              = "string" | "int" | "list"
+field             = field_type field_name
+field_list        = field ("," field_list)?
+struct_definition = "struct" struct_name:identifier "{" fields:field_list? "}"
+```
