@@ -200,8 +200,8 @@ func Start(laddr, dir, bootURL string) (*Service, error) {
 
 // Err returns a serious error preventing this process from
 // operating normally or making progress, if any.
-// Note that it is possible to recover from some errors
-// returned by Err.
+// Note that it is possible for a Service to recover automatically
+// from some errors returned by Err.
 func (sv *Service) Err() error {
 	sv.errMu.Lock()
 	defer sv.errMu.Unlock()
