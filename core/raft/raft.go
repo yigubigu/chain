@@ -485,8 +485,8 @@ func (sv *Service) applyEntry(ent raftpb.Entry) error {
 				"addr", string(cc.Context),
 			)
 			sv.stateMu.Lock()
+			defer sv.stateMu.Unlock()
 			sv.state.SetPeerAddr(cc.NodeID, string(cc.Context))
-			sv.stateMu.Unlock()
 		case raftpb.ConfChangeRemoveNode:
 			if cc.NodeID == sv.id {
 				// log.Println("I've been removed from the cluster! Shutting down.")
@@ -494,7 +494,10 @@ func (sv *Service) applyEntry(ent raftpb.Entry) error {
 				// or attempt to rejoin as a new follower???
 				panic("evicted")
 			}
-			// TODO(kr): sv.removePeer(cc.NodeID)
+			sv.stateMu.Lock()
+			defer sv.stateMu.Unlock()
+			// TODO (ameets): if synchro stuff goes away don't need locking
+			sv.state.RemovePeerAddr(cc.NodeID)			
 		}
 	case raftpb.EntryNormal:
 		if ent.Index < sv.appliedIndex {
