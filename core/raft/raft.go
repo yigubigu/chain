@@ -478,9 +478,9 @@ func (sv *Service) applyEntry(ent raftpb.Entry) error {
 		}
 		sv.raftNode.ApplyConfChange(cc)
 		switch cc.Type {
-		case raftpb.ConfChangeAddNode:
+		case raftpb.ConfChangeAddNode, raftpb.ConfChangeUpdateNode:
 			log.Write(context.Background(),
-				"what", "adding node",
+				"what", cc.Type,
 				"id", cc.NodeID,
 				"addr", string(cc.Context),
 			)
@@ -497,7 +497,7 @@ func (sv *Service) applyEntry(ent raftpb.Entry) error {
 			sv.stateMu.Lock()
 			defer sv.stateMu.Unlock()
 			// TODO (ameets): if synchro stuff goes away don't need locking
-			sv.state.RemovePeerAddr(cc.NodeID)			
+			sv.state.RemovePeerAddr(cc.NodeID)
 		}
 	case raftpb.EntryNormal:
 		if ent.Index < sv.appliedIndex {
