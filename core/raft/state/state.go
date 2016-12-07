@@ -31,6 +31,14 @@ func (s *State) GetPeerAddr(id uint64) (addr string) {
 	return s.peers[id]
 }
 
+// RemovePeerAddr deletes the current address for the given peer if it exists.
+func (s *State) RemovePeerAddr(id uint64) {
+	if s.peers == nil {
+		return
+	}
+	delete(s.peers, id)
+}
+
 // RestoreSnapshot decodes data and overwrites the contents of s.
 // It should be called with the retrieved snapshot
 // when bootstrapping a new node from an existing cluster
