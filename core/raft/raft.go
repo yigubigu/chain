@@ -55,7 +55,8 @@ type Service struct {
 	dir string
 	id  uint64
 	mux *http.ServeMux
-
+	rctxReq chan rctxReq
+	
 	errMu sync.Mutex
 	err   error
 
@@ -78,6 +79,11 @@ type Service struct {
 	appliedIndex uint64
 	snapIndex    uint64
 	confState    raftpb.ConfState
+}
+
+type rctxReq struct {
+	rctx []byte
+	index chan uint64
 }
 
 // Getter gets a value from a key-value store.
@@ -195,10 +201,7 @@ func (sv *Service) Err() error {
 	return sv.err
 }
 
-// runUpdates runs forever, reading and processing updates from raft
-// onto local storage.
-func (sv *Service) runUpdates(wal *wal.WAL) {
-	for rd := range sv.raftNode.Ready() {
+func (sv *Service) runUpdatesReady(wal *wal.WAL) {
 		wal.Save(rd.HardState, rd.Entries)
 		if !raft.IsEmptySnap(rd.Snapshot) {
 			sv.redo(func() error {
@@ -258,6 +261,26 @@ func (sv *Service) runUpdates(wal *wal.WAL) {
 			}
 		}
 
+}
+
+func replyReadIndex(rdIndices map, readStates []raft.ReadState) {
+	for _, state := range readStates {
+		ch, ok := rdIndices[string(state.RequestCtx)]
+		if(ok) {
+			ch <- state.Index
+		} 
+	}
+}
+
+// runUpdates runs forever, reading and processing updates from raft
+// onto local storage.
+func (sv *Service) runUpdates(wal *wal.WAL) {
+	rdIndices := make(map[string] chan uint64)	
+	for {
+		select {
+			case rd := <-sv.raftNode.Ready(): replyReadIndex(rdIndices, rd.ReadStates); sv.runUpdatesReady(wal)
+			case req := <-sv.rctxReq: rdIndices[string(req.rctx)] = req.index
+		}
 	}
 }
 
@@ -280,7 +303,8 @@ func (sv *Service) Set(ctx context.Context, key, val string) error {
 	prop := make([]byte, 1+len(b))
 	copy(prop[1:], b)
 
-	// TODO(kr): wait for commit
+	/// TODO(kr): wait for commit
+	
 	return errors.Wrap(sv.raftNode.Propose(ctx, prop)) // DOES NOT block for raft
 }
 
@@ -295,8 +319,18 @@ func (sv *Service) Set(ctx context.Context, key, val string) error {
 func (sv *Service) Get(key string) string {
 	ctx := context.TODO()
 	// TODO(kr): piggyback on write ops -- see raft.Node.ReadIndex
-	sv.raftNode.Propose(ctx, []byte{propRead})
-	// TODO(kr): wait for commit
+	// [DONE] generate unique read request id
+	// [DONE] call ReadIndex passing in request id
+	// [WIP] wait for correct read state to be returned (same request id)
+	// [WIP] wait for the proposal on the index from read state to be applied (i.e. index advances beyond)
+	// [WIP] possibly refactor
+	rctx := randID()
+	req := rctxReq{rctx:rctx, index:make(chan uint64)} 
+	sv.rctxReq <- req
+	sv.raftNode.ReadIndex(rctx)
+	idx := <-req.index
+	//TODO (ameets): wait will compare against sv.appliedIndex
+	sv.wait(idx)		
 	return sv.Stale().Get(key)
 }
 
