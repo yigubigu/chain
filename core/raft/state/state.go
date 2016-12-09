@@ -17,6 +17,7 @@ type State struct {
 	state        map[string]string
 	peers        map[uint64]string // id -> addr
 	appliedIndex uint64
+	nextNodeID   uint64
 }
 
 // SetPeerAddr sets the address for the given peer.
@@ -76,8 +77,8 @@ func (s *State) Apply(data []byte, index uint64) error {
 		s.state = make(map[string]string)
 	}
 	// TODO(kr): figure out a better entry encoding
-	var kv map[string]string
-	err := json.Unmarshal(data, &kv)
+	var x interface{}
+	err := json.Unmarshal(data, &x)
 	if err != nil {
 		// An error here indicates a malformed update
 		// was written to the raft log. We do version
@@ -86,9 +87,17 @@ func (s *State) Apply(data []byte, index uint64) error {
 		// all speaking the same version.
 		return errors.Wrap(err)
 	}
-	for k, v := range kv {
-		s.state[k] = v
+	switch x := x.(type) {
+	case float64: //json doesn't unmarshal interface to uint64
+		if uint64(x) == s.nextNodeID {
+			s.nextNodeID++
+		}
+	case map[string]interface{}:
+		for k, v := range x {
+			s.state[k] = v.(string)
+		}
 	}
+
 	s.appliedIndex = index
 	return nil
 }
@@ -112,4 +121,17 @@ func Set(key, value string) []byte {
 // AppliedIndex returns the raft log index (applied index) of current state
 func (s *State) AppliedIndex() uint64 {
 	return s.appliedIndex
+}
+
+// IDCounter
+func (s *State) NextNodeID() uint64 {
+	return s.nextNodeID
+}
+
+func IncrementNextNodeID(oldID uint64) []byte {
+	//good enough for now - no other operation is an integer
+	//ideally have a type to represent the instructions
+	b, _ := json.Marshal(oldID) //error can't really happen
+
+	return b
 }
