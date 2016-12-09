@@ -296,22 +296,13 @@ func runTicks(rn raft.Node) {
 	}
 }
 
-const (
-	propWrite = iota
-	propRead
-)
-
 // Set sets a value in the key-value storage.
 // If successful, it returns after the value is committed to
 // the raft log.
 func (sv *Service) Set(ctx context.Context, key, val string) error {
 	b := state.Set(key, val)
-	prop := make([]byte, 1+len(b))
-	copy(prop[1:], b)
-
 	/// TODO(kr): wait for commit
-
-	return errors.Wrap(sv.raftNode.Propose(ctx, prop)) // DOES NOT block for raft
+	return errors.Wrap(sv.raftNode.Propose(ctx, b)) // DOES NOT block for raft
 }
 
 // Get gets a value from the key-value store.
@@ -545,18 +536,10 @@ func (sv *Service) applyEntry(ent raftpb.Entry) error {
 	case raftpb.EntryNormal:
 		//TODO ameets: remove read/write leading byte
 		log.Write(context.Background(), "EntryNormal", ent)
-		if len(ent.Data) == 0 {
-			return nil
-		}
-		switch ent.Data[0] {
-		case propWrite:
-			sv.stateMu.Lock()
-			sv.state.Apply(ent.Data[1:], ent.Index)
-			sv.stateCond.Broadcast()
-			sv.stateMu.Unlock()
-		case propRead:
-			// nothing
-		}
+		sv.stateMu.Lock()
+		sv.state.Apply(ent.Data, ent.Index)
+		sv.stateCond.Broadcast()
+		sv.stateMu.Unlock()
 	default:
 		return errors.Wrap(fmt.Errorf("unknown entry type: %v", ent))
 	}
