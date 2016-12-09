@@ -311,6 +311,7 @@ func runTicks(rn raft.Node) {
 // Set sets a value in the key-value storage.
 // If successful, it returns after the value is committed to
 // the raft log.
+// TODO (ameets): possibly RawNode in future to know whether Proposal worked or not
 func (sv *Service) Set(ctx context.Context, key, val string) error {
 	// encode w/ json for now: b with a wctx rand id
 	b := state.Set(key, val)
@@ -327,9 +328,15 @@ func (sv *Service) Set(ctx context.Context, key, val string) error {
 		sv.wctxReq <- wctxReq{wctx: wctx}
 		return errors.Wrap(err)
 	}
-	idx := <-req.index
-	sv.wait(idx)
-	return nil
+	ctx, cancel := context.WithTimeout(ctx, time.Minute) //TODO: realistic timeout
+	defer cancel()
+	select {
+	case idx := <-req.index:
+		sv.wait(idx)
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // Get gets a value from the key-value store.
