@@ -14,8 +14,9 @@ import (
 // and apply replicated updates from a raft log.
 // The zero value is an empty State ready to use.
 type State struct {
-	state map[string]string
-	peers map[uint64]string // id -> addr
+	state        map[string]string
+	peers        map[uint64]string // id -> addr
+	appliedIndex uint64
 }
 
 // SetPeerAddr sets the address for the given peer.
@@ -43,13 +44,14 @@ func (s *State) RemovePeerAddr(id uint64) {
 // It should be called with the retrieved snapshot
 // when bootstrapping a new node from an existing cluster
 // or when recovering from a file on disk.
-func (s *State) RestoreSnapshot(data []byte) error {
+func (s *State) RestoreSnapshot(data []byte, index uint64) error {
 	if s.peers == nil {
 		s.peers = make(map[uint64]string)
 	}
 	if s.state == nil {
 		s.state = make(map[string]string)
 	}
+	s.appliedIndex = index
 	// TODO(kr): figure out a better snapshot encoding
 	err := json.Unmarshal(data, s)
 	log.Messagef(context.Background(), "decoded snapshot %#v (err %v)", s, err)
@@ -58,15 +60,18 @@ func (s *State) RestoreSnapshot(data []byte) error {
 
 // Snapshot returns an encoded copy of s
 // suitable for RestoreSnapshot.
-func (s *State) Snapshot() ([]byte, error) {
+func (s *State) Snapshot() ([]byte, uint64, error) {
 	log.Messagef(context.Background(), "encoding snapshot %#v", s)
 	// TODO(kr): figure out a better snapshot encoding
 	data, err := json.Marshal(s)
-	return data, errors.Wrap(err)
+	return data, s.appliedIndex, errors.Wrap(err)
 }
 
 // Apply applies a raft log entry payload to s.
-func (s *State) Apply(data []byte) error {
+func (s *State) Apply(data []byte, index uint64) error {
+	if index < s.appliedIndex {
+		return nil
+	}
 	if s.state == nil {
 		s.state = make(map[string]string)
 	}
@@ -84,6 +89,7 @@ func (s *State) Apply(data []byte) error {
 	for k, v := range kv {
 		s.state[k] = v
 	}
+	s.appliedIndex = index
 	return nil
 }
 
@@ -101,4 +107,9 @@ func Set(key, value string) []byte {
 	// TODO(kr): figure out a better entry encoding
 	b, _ := json.Marshal(map[string]string{key: value}) // error can't happen
 	return b
+}
+
+// AppliedIndex returns the raft log index (applied index) of current state
+func (s *State) AppliedIndex() uint64 {
+	return s.appliedIndex
 }

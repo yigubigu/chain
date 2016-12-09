@@ -76,9 +76,8 @@ type Service struct {
 
 	// Current log position.
 	// access only from runUpdates goroutine
-	appliedIndex uint64
-	snapIndex    uint64
-	confState    raftpb.ConfState
+	snapIndex uint64
+	confState raftpb.ConfState
 }
 
 type rctxReq struct {
@@ -155,7 +154,7 @@ func Start(laddr, dir, bootURL string) (*Service, error) {
 		ElectionTick:    10,
 		HeartbeatTick:   1,
 		Storage:         sv.raftStorage,
-		Applied:         sv.appliedIndex,
+		Applied:         sv.state.AppliedIndex(),
 		MaxSizePerMsg:   4096,
 		MaxInflightMsgs: 256,
 	}
@@ -230,11 +229,12 @@ func (sv *Service) runUpdatesReady(rd raft.Ready, wal *wal.WAL) {
 		sv.confState = rd.Snapshot.Metadata.ConfState
 	}
 	sv.raftStorage.Append(rd.Entries)
-
+	var lastEntryIndex uint64
 	for _, entry := range rd.CommittedEntries {
 		sv.redo(func() error {
 			return sv.applyEntry(entry)
 		})
+		lastEntryIndex = entry.Index
 	}
 
 	// NOTE(kr): we must apply entries before sending messages,
@@ -244,7 +244,7 @@ func (sv *Service) runUpdatesReady(rd raft.Ready, wal *wal.WAL) {
 		return sv.send(rd.Messages)
 	})
 
-	if sv.appliedIndex-sv.snapIndex > snapCount {
+	if lastEntryIndex > sv.snapIndex+snapCount {
 		sv.redo(func() error {
 			return sv.triggerSnapshot()
 		})
@@ -332,7 +332,7 @@ func (sv *Service) Get(key string) string {
 	sv.rctxReq <- req
 	sv.raftNode.ReadIndex(ctx, rctx)
 	idx := <-req.index
-	//TODO (ameets): wait will compare against sv.appliedIndex
+	//TODO (ameets): wait will compare against state's applied index
 	//sv.wait(idx)
 	_ = idx
 	return sv.Stale().Get(key)
@@ -459,14 +459,13 @@ func (sv *Service) join(addr, baseURL string) error {
 	if raft.IsEmptySnap(raftSnap) {
 		log.Write(ctx, "at", "joined", "appliedindex", 0, "msg", "(empty snap)")
 	} else {
-		err = sv.state.RestoreSnapshot(raftSnap.Data)
+		err = sv.state.RestoreSnapshot(raftSnap.Data, raftSnap.Metadata.Index)
 		if err != nil {
 			return errors.Wrap(err)
 		}
 		sv.confState = raftSnap.Metadata.ConfState
 		sv.snapIndex = raftSnap.Metadata.Index
-		sv.appliedIndex = raftSnap.Metadata.Index
-		log.Write(ctx, "at", "joined", "appliedindex", sv.appliedIndex)
+		log.Write(ctx, "at", "joined", "appliedindex", raftSnap.Metadata.Index)
 	}
 
 	return nil
@@ -538,9 +537,7 @@ func (sv *Service) applyEntry(ent raftpb.Entry) error {
 			sv.state.RemovePeerAddr(cc.NodeID)
 		}
 	case raftpb.EntryNormal:
-		if ent.Index < sv.appliedIndex {
-			return nil
-		}
+		//TODO ameets: remove read/write leading byte
 		log.Write(context.Background(), "EntryNormal", ent)
 		if len(ent.Data) == 0 {
 			return nil
@@ -548,7 +545,7 @@ func (sv *Service) applyEntry(ent raftpb.Entry) error {
 		switch ent.Data[0] {
 		case propWrite:
 			sv.stateMu.Lock()
-			sv.state.Apply(ent.Data[1:])
+			sv.state.Apply(ent.Data[1:], ent.Index)
 			sv.stateMu.Unlock()
 		case propRead:
 			// nothing
@@ -557,7 +554,6 @@ func (sv *Service) applyEntry(ent raftpb.Entry) error {
 		return errors.Wrap(fmt.Errorf("unknown entry type: %v", ent))
 	}
 
-	sv.appliedIndex = ent.Index
 	return nil
 }
 
@@ -631,13 +627,12 @@ func (sv *Service) recover() (*wal.WAL, error) {
 	sv.raftStorage.ApplySnapshot(raftSnap)
 	if raft.IsEmptySnap(raftSnap) {
 	} else {
-		err = sv.state.RestoreSnapshot(raftSnap.Data)
+		err = sv.state.RestoreSnapshot(raftSnap.Data, raftSnap.Metadata.Index)
 		if err != nil {
 			return nil, errors.Wrap(err)
 		}
 		sv.confState = raftSnap.Metadata.ConfState
 		sv.snapIndex = raftSnap.Metadata.Index
-		sv.appliedIndex = raftSnap.Metadata.Index
 	}
 
 	sv.raftStorage.SetHardState(st)
@@ -654,12 +649,12 @@ func (sv *Service) recover() (*wal.WAL, error) {
 
 func (sv *Service) getSnapshot() (*raftpb.Snapshot, error) {
 	sv.stateMu.Lock()
-	data, err := sv.state.Snapshot()
+	data, index, err := sv.state.Snapshot()
 	sv.stateMu.Unlock()
 	if err != nil {
 		return nil, errors.Wrap(err)
 	}
-	snap, err := sv.raftStorage.CreateSnapshot(sv.appliedIndex, &sv.confState, data)
+	snap, err := sv.raftStorage.CreateSnapshot(index, &sv.confState, data)
 	return &snap, errors.Wrap(err)
 }
 
@@ -674,14 +669,14 @@ func (sv *Service) triggerSnapshot() error {
 	}
 
 	var compactIndex uint64 = 1
-	if sv.appliedIndex > nSnapCatchupEntries {
-		compactIndex = sv.appliedIndex - nSnapCatchupEntries
+	if snap.Metadata.Index > nSnapCatchupEntries {
+		compactIndex = snap.Metadata.Index - nSnapCatchupEntries
 	}
 	err = sv.raftStorage.Compact(compactIndex)
 	if err != nil {
 		return errors.Wrap(err)
 	}
-	sv.snapIndex = sv.appliedIndex
+	sv.snapIndex = snap.Metadata.Index
 	return nil
 }
 
