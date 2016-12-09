@@ -586,7 +586,6 @@ func (sv *Service) applyEntry(ent raftpb.Entry) error {
 			sv.state.RemovePeerAddr(cc.NodeID)
 		}
 	case raftpb.EntryNormal:
-		//TODO ameets: remove read/write leading byte
 		log.Write(context.Background(), "EntryNormal", ent)
 		sv.stateMu.Lock()
 		var p proposal
