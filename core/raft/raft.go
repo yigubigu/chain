@@ -71,8 +71,9 @@ type Service struct {
 	raftStorage *raft.MemoryStorage
 
 	// The actual replicated data set.
-	stateMu sync.Mutex
-	state   state.State
+	stateMu   sync.Mutex
+	stateCond sync.Cond
+	state     state.State
 
 	// Current log position.
 	// access only from runUpdates goroutine
@@ -125,6 +126,8 @@ func Start(laddr, dir, bootURL string) (*Service, error) {
 		mux:         http.NewServeMux(),
 		raftStorage: raft.NewMemoryStorage(),
 	}
+	sv.stateCond.L = &sv.stateMu
+
 	// TODO(kr): grpc
 	sv.mux.HandleFunc("/raft/join", sv.serveJoin)
 	sv.mux.HandleFunc("/raft/msg", sv.serveMsg)
@@ -321,21 +324,22 @@ func (sv *Service) Set(ctx context.Context, key, val string) error {
 // This can be slow; for faster but possibly stale reads, see Stale.
 func (sv *Service) Get(key string) string {
 	ctx := context.TODO()
-	// TODO(kr): piggyback on write ops -- see raft.Node.ReadIndex
-	// [DONE] generate unique read request id
-	// [DONE] call ReadIndex passing in request id
-	// [WIP] wait for correct read state to be returned (same request id)
-	// [WIP] wait for the proposal on the index from read state to be applied (i.e. index advances beyond)
-	// [WIP] possibly refactor
+	// TODO (ameets)[WIP] possibly refactor, maybe read while holding the lock?
 	rctx := randID()
 	req := rctxReq{rctx: rctx, index: make(chan uint64)}
 	sv.rctxReq <- req
 	sv.raftNode.ReadIndex(ctx, rctx)
 	idx := <-req.index
-	//TODO (ameets): wait will compare against state's applied index
-	//sv.wait(idx)
-	_ = idx
+	sv.wait(idx)
 	return sv.Stale().Get(key)
+}
+
+func (sv *Service) wait(index uint64) {
+	sv.stateMu.Lock()
+	for sv.state.AppliedIndex() < index {
+		sv.stateCond.Wait()
+	}
+	sv.stateMu.Unlock()
 }
 
 // Stale returns an object that reads
@@ -523,6 +527,7 @@ func (sv *Service) applyEntry(ent raftpb.Entry) error {
 			)
 			sv.stateMu.Lock()
 			defer sv.stateMu.Unlock()
+			defer sv.stateCond.Broadcast()
 			sv.state.SetPeerAddr(cc.NodeID, string(cc.Context))
 		case raftpb.ConfChangeRemoveNode:
 			if cc.NodeID == sv.id {
@@ -533,6 +538,7 @@ func (sv *Service) applyEntry(ent raftpb.Entry) error {
 			}
 			sv.stateMu.Lock()
 			defer sv.stateMu.Unlock()
+			defer sv.stateCond.Broadcast()
 			// TODO (ameets): if synchro stuff goes away don't need locking
 			sv.state.RemovePeerAddr(cc.NodeID)
 		}
@@ -546,6 +552,7 @@ func (sv *Service) applyEntry(ent raftpb.Entry) error {
 		case propWrite:
 			sv.stateMu.Lock()
 			sv.state.Apply(ent.Data[1:], ent.Index)
+			sv.stateCond.Broadcast()
 			sv.stateMu.Unlock()
 		case propRead:
 			// nothing
