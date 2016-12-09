@@ -52,11 +52,11 @@ var crcTable = crc32.MakeTable(crc32.Castagnoli)
 // Service holds the key-value data and performs raft coordination.
 type Service struct {
 	// config
-	dir string
-	id  uint64
-	mux *http.ServeMux
+	dir     string
+	id      uint64
+	mux     *http.ServeMux
 	rctxReq chan rctxReq
-	
+
 	errMu sync.Mutex
 	err   error
 
@@ -82,7 +82,7 @@ type Service struct {
 }
 
 type rctxReq struct {
-	rctx []byte
+	rctx  []byte
 	index chan uint64
 }
 
@@ -201,85 +201,88 @@ func (sv *Service) Err() error {
 	return sv.err
 }
 
-func (sv *Service) runUpdatesReady(rd raft.Ready , wal *wal.WAL) {
-		wal.Save(rd.HardState, rd.Entries)
-		if !raft.IsEmptySnap(rd.Snapshot) {
-			sv.redo(func() error {
-				return sv.saveSnapshot(&rd.Snapshot)
-			})
-			sv.redo(func() error {
-				// Note: wal.SaveSnapshot saves the snapshot *position*,
-				// not the actual full snapshot data.
-				// That happens in sv.saveSnapshot just above.
-				// (So don't worry, we're not saving it twice.)
-				return wal.SaveSnapshot(walpb.Snapshot{
-					Index: rd.Snapshot.Metadata.Index,
-					Term:  rd.Snapshot.Metadata.Term,
-				})
-			})
-			sv.redo(func() error {
-				return wal.ReleaseLockTo(rd.Snapshot.Metadata.Index)
-			})
-			// Only error here is snapshot too old;
-			// should be impossible.
-			// (And if it happens, it's permanent.)
-			sv.redo(func() error {
-				return sv.raftStorage.ApplySnapshot(rd.Snapshot)
-			})
-			sv.snapIndex = rd.Snapshot.Metadata.Index
-			sv.confState = rd.Snapshot.Metadata.ConfState
-		}
-		sv.raftStorage.Append(rd.Entries)
-
-		for _, entry := range rd.CommittedEntries {
-			sv.redo(func() error {
-				return sv.applyEntry(entry)
-			})
-		}
-
-		// NOTE(kr): we must apply entries before sending messages,
-		// because some ConfChangeAddNode entries contain the address
-		// needed for subsequent messages.
+func (sv *Service) runUpdatesReady(rd raft.Ready, wal *wal.WAL) {
+	wal.Save(rd.HardState, rd.Entries)
+	if !raft.IsEmptySnap(rd.Snapshot) {
 		sv.redo(func() error {
-			return sv.send(rd.Messages)
+			return sv.saveSnapshot(&rd.Snapshot)
 		})
-
-		if sv.appliedIndex-sv.snapIndex > snapCount {
-			sv.redo(func() error {
-				return sv.triggerSnapshot()
+		sv.redo(func() error {
+			// Note: wal.SaveSnapshot saves the snapshot *position*,
+			// not the actual full snapshot data.
+			// That happens in sv.saveSnapshot just above.
+			// (So don't worry, we're not saving it twice.)
+			return wal.SaveSnapshot(walpb.Snapshot{
+				Index: rd.Snapshot.Metadata.Index,
+				Term:  rd.Snapshot.Metadata.Term,
 			})
-		}
-		sv.raftNode.Advance()
+		})
+		sv.redo(func() error {
+			return wal.ReleaseLockTo(rd.Snapshot.Metadata.Index)
+		})
+		// Only error here is snapshot too old;
+		// should be impossible.
+		// (And if it happens, it's permanent.)
+		sv.redo(func() error {
+			return sv.raftStorage.ApplySnapshot(rd.Snapshot)
+		})
+		sv.snapIndex = rd.Snapshot.Metadata.Index
+		sv.confState = rd.Snapshot.Metadata.ConfState
+	}
+	sv.raftStorage.Append(rd.Entries)
 
-		if sv.id == 1 && len(rd.Entries) > 0 && rd.Entries[len(rd.Entries)-1].Index <= 2 {
-			// Don't wait for ElectionTick ticks before becoming first leader
-			// in a fresh single-node cluster; do it immediately.
-			err := sv.raftNode.Campaign(context.Background())
-			if err != nil {
-				// oh well, we will campaign anyway after ElectionTick
-				log.Error(context.Background(), err)
-			}
+	for _, entry := range rd.CommittedEntries {
+		sv.redo(func() error {
+			return sv.applyEntry(entry)
+		})
+	}
+
+	// NOTE(kr): we must apply entries before sending messages,
+	// because some ConfChangeAddNode entries contain the address
+	// needed for subsequent messages.
+	sv.redo(func() error {
+		return sv.send(rd.Messages)
+	})
+
+	if sv.appliedIndex-sv.snapIndex > snapCount {
+		sv.redo(func() error {
+			return sv.triggerSnapshot()
+		})
+	}
+	sv.raftNode.Advance()
+
+	if sv.id == 1 && len(rd.Entries) > 0 && rd.Entries[len(rd.Entries)-1].Index <= 2 {
+		// Don't wait for ElectionTick ticks before becoming first leader
+		// in a fresh single-node cluster; do it immediately.
+		err := sv.raftNode.Campaign(context.Background())
+		if err != nil {
+			// oh well, we will campaign anyway after ElectionTick
+			log.Error(context.Background(), err)
 		}
+	}
 
 }
 
-func replyReadIndex(rdIndices map[string] chan uint64, readStates []raft.ReadState) {
+func replyReadIndex(rdIndices map[string]chan uint64, readStates []raft.ReadState) {
 	for _, state := range readStates {
 		ch, ok := rdIndices[string(state.RequestCtx)]
-		if(ok) {
+		if ok {
 			ch <- state.Index
-		} 
+		}
 	}
 }
 
 // runUpdates runs forever, reading and processing updates from raft
 // onto local storage.
 func (sv *Service) runUpdates(wal *wal.WAL) {
-	rdIndices := make(map[string] chan uint64)	
+	rdIndices := make(map[string]chan uint64)
 	for {
 		select {
-			case rd := <-sv.raftNode.Ready(): replyReadIndex(rdIndices, rd.ReadStates); sv.runUpdatesReady(rd, wal)
-			case req := <-sv.rctxReq: rdIndices[string(req.rctx)] = req.index
+		case rd := <-sv.raftNode.Ready():
+			replyReadIndex(rdIndices, rd.ReadStates)
+			sv.runUpdatesReady(rd, wal)
+		case req := <-sv.rctxReq:
+			rdIndices[string(req.rctx)] = req.index
 		}
 	}
 }
@@ -304,7 +307,7 @@ func (sv *Service) Set(ctx context.Context, key, val string) error {
 	copy(prop[1:], b)
 
 	/// TODO(kr): wait for commit
-	
+
 	return errors.Wrap(sv.raftNode.Propose(ctx, prop)) // DOES NOT block for raft
 }
 
@@ -325,12 +328,12 @@ func (sv *Service) Get(key string) string {
 	// [WIP] wait for the proposal on the index from read state to be applied (i.e. index advances beyond)
 	// [WIP] possibly refactor
 	rctx := randID()
-	req := rctxReq{rctx:rctx, index:make(chan uint64)} 
+	req := rctxReq{rctx: rctx, index: make(chan uint64)}
 	sv.rctxReq <- req
 	sv.raftNode.ReadIndex(ctx, rctx)
 	idx := <-req.index
 	//TODO (ameets): wait will compare against sv.appliedIndex
-	//sv.wait(idx)		
+	//sv.wait(idx)
 	_ = idx
 	return sv.Stale().Get(key)
 }

@@ -1,7 +1,7 @@
 package raft
 
 import (
-"crypto/rand"
+	"crypto/rand"
 )
 
 func randID() []byte {
@@ -9,8 +9,7 @@ func randID() []byte {
 	b := make([]byte, c)
 	_, err := rand.Read(b)
 	if err != nil {
-    		panic(err)
+		panic(err)
 	}
 	return b
 }
-
