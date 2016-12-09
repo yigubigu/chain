@@ -287,17 +287,35 @@ func replyReadIndex(rdIndices map[string]chan uint64, readStates []raft.ReadStat
 	}
 }
 
+func replyWriteIndex(wIndices map[string]chan uint64, commitedEntries []pb.Entry) {
+	var p proposal
+	for _, entry := range committedEntries {
+		err := json.Unmarshal(entry.Data, &p)
+		if err != nil {
+			continue
+		}
+		ch, ok := wIndices[string(p.Wctx)]
+		if ok {
+			ch <- entry.Index
+		}
+	}
+}
+
 // runUpdates runs forever, reading and processing updates from raft
 // onto local storage.
 func (sv *Service) runUpdates(wal *wal.WAL) {
 	rdIndices := make(map[string]chan uint64)
+	wIndices := make(map[string]chan uint64)
 	for {
 		select {
 		case rd := <-sv.raftNode.Ready():
 			replyReadIndex(rdIndices, rd.ReadStates)
+			replyWriteIndex(wIndices, rd.CommittedEntries)
 			sv.runUpdatesReady(rd, wal)
 		case req := <-sv.rctxReq:
 			rdIndices[string(req.rctx)] = req.index
+		case req := <-sv.wctxReq:
+			wIndices[string(req.wctx)] = req.index
 		}
 	}
 }
@@ -571,7 +589,12 @@ func (sv *Service) applyEntry(ent raftpb.Entry) error {
 		//TODO ameets: remove read/write leading byte
 		log.Write(context.Background(), "EntryNormal", ent)
 		sv.stateMu.Lock()
-		sv.state.Apply(ent.Data, ent.Index)
+		var p proposal
+		err := json.Unmarshal(ent.Data, &p)
+		if err != nil {
+			return errors.Wrap(err)
+		}
+		sv.state.Apply(p.Operation, ent.Index)
 		sv.stateCond.Broadcast()
 		sv.stateMu.Unlock()
 	default:
