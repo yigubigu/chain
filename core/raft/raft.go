@@ -287,7 +287,7 @@ func replyReadIndex(rdIndices map[string]chan uint64, readStates []raft.ReadStat
 	}
 }
 
-func replyWriteIndex(wIndices map[string]chan uint64, commitedEntries []pb.Entry) {
+func replyWriteIndex(wIndices map[string]chan uint64, committedEntries []raftpb.Entry) {
 	var p proposal
 	for _, entry := range committedEntries {
 		err := json.Unmarshal(entry.Data, &p)
