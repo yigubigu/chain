@@ -56,6 +56,7 @@ type Service struct {
 	id      uint64
 	mux     *http.ServeMux
 	rctxReq chan rctxReq
+	wctxReq chan wctxReq
 
 	errMu sync.Mutex
 	err   error
@@ -84,6 +85,17 @@ type Service struct {
 type rctxReq struct {
 	rctx  []byte
 	index chan uint64
+}
+
+//TODO (ameets) possible refactor if same as rctxReq
+type wctxReq struct {
+	wctx  []byte
+	index chan uint64
+}
+
+type proposal struct {
+	Wctx      []byte
+	Operation []byte
 }
 
 // Getter gets a value from a key-value store.
@@ -300,9 +312,24 @@ func runTicks(rn raft.Node) {
 // If successful, it returns after the value is committed to
 // the raft log.
 func (sv *Service) Set(ctx context.Context, key, val string) error {
+	// encode w/ json for now: b with a wctx rand id
 	b := state.Set(key, val)
-	/// TODO(kr): wait for commit
-	return errors.Wrap(sv.raftNode.Propose(ctx, b)) // DOES NOT block for raft
+	wctx := randID()
+	prop := proposal{Wctx: wctx, Operation: b}
+	data, err := json.Marshal(prop)
+	if err != nil {
+		return errors.Wrap(err)
+	}
+	req := wctxReq{wctx: wctx, index: make(chan uint64)}
+	sv.wctxReq <- req
+	err = sv.raftNode.Propose(ctx, data)
+	if err != nil {
+		sv.wctxReq <- wctxReq{wctx: wctx}
+		return errors.Wrap(err)
+	}
+	idx := <-req.index
+	sv.wait(idx)
+	return nil
 }
 
 // Get gets a value from the key-value store.
