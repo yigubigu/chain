@@ -4,7 +4,7 @@ import (
 "crypto/rand"
 )
 
-func randID() []bytes {
+func randID() []byte {
 	c := 16 // prevent collisions
 	b := make([]byte, c)
 	_, err := rand.Read(b)

@@ -201,7 +201,7 @@ func (sv *Service) Err() error {
 	return sv.err
 }
 
-func (sv *Service) runUpdatesReady(wal *wal.WAL) {
+func (sv *Service) runUpdatesReady(rd raft.Ready , wal *wal.WAL) {
 		wal.Save(rd.HardState, rd.Entries)
 		if !raft.IsEmptySnap(rd.Snapshot) {
 			sv.redo(func() error {
@@ -263,7 +263,7 @@ func (sv *Service) runUpdatesReady(wal *wal.WAL) {
 
 }
 
-func replyReadIndex(rdIndices map, readStates []raft.ReadState) {
+func replyReadIndex(rdIndices map[string] chan uint64, readStates []raft.ReadState) {
 	for _, state := range readStates {
 		ch, ok := rdIndices[string(state.RequestCtx)]
 		if(ok) {
@@ -278,7 +278,7 @@ func (sv *Service) runUpdates(wal *wal.WAL) {
 	rdIndices := make(map[string] chan uint64)	
 	for {
 		select {
-			case rd := <-sv.raftNode.Ready(): replyReadIndex(rdIndices, rd.ReadStates); sv.runUpdatesReady(wal)
+			case rd := <-sv.raftNode.Ready(): replyReadIndex(rdIndices, rd.ReadStates); sv.runUpdatesReady(rd, wal)
 			case req := <-sv.rctxReq: rdIndices[string(req.rctx)] = req.index
 		}
 	}
@@ -327,10 +327,11 @@ func (sv *Service) Get(key string) string {
 	rctx := randID()
 	req := rctxReq{rctx:rctx, index:make(chan uint64)} 
 	sv.rctxReq <- req
-	sv.raftNode.ReadIndex(rctx)
+	sv.raftNode.ReadIndex(ctx, rctx)
 	idx := <-req.index
 	//TODO (ameets): wait will compare against sv.appliedIndex
-	sv.wait(idx)		
+	//sv.wait(idx)		
+	_ = idx
 	return sv.Stale().Get(key)
 }
 
