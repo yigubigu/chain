@@ -284,6 +284,7 @@ func replyReadIndex(rdIndices map[string]chan uint64, readStates []raft.ReadStat
 		ch, ok := rdIndices[string(state.RequestCtx)]
 		if ok {
 			ch <- state.Index
+			delete(rdIndices, string(state.RequestCtx))
 		}
 	}
 }
@@ -617,6 +618,7 @@ func (sv *Service) applyEntry(ent raftpb.Entry, writers map[string]chan bool) er
 		// send 'satisfied' over channel to caller
 		if c := writers[string(p.Wctx)]; c != nil {
 			c <- satisfied
+			delete(writers, string(p.Wctx))
 		}
 	default:
 		return errors.Wrap(fmt.Errorf("unknown entry type: %v", ent))
