@@ -31,6 +31,8 @@ import (
 	"chain/log"
 )
 
+var ErrUnsatisfied = errors.New("precondition not satisfied")
+
 // TODO(kr): do we need a "client" mode?
 // So we can have many coreds without all of them
 // having to be active raft nodes.
@@ -87,10 +89,9 @@ type rctxReq struct {
 	index chan uint64
 }
 
-//TODO (ameets) possible refactor if same as rctxReq
 type wctxReq struct {
-	wctx  []byte
-	index chan uint64
+	wctx      []byte
+	satisfied chan bool
 }
 
 type proposal struct {
@@ -215,7 +216,7 @@ func (sv *Service) Err() error {
 	return sv.err
 }
 
-func (sv *Service) runUpdatesReady(rd raft.Ready, wal *wal.WAL) {
+func (sv *Service) runUpdatesReady(rd raft.Ready, wal *wal.WAL, writers map[string]chan bool) {
 	wal.Save(rd.HardState, rd.Entries)
 	if !raft.IsEmptySnap(rd.Snapshot) {
 		sv.redo(func() error {
@@ -247,7 +248,7 @@ func (sv *Service) runUpdatesReady(rd raft.Ready, wal *wal.WAL) {
 	var lastEntryIndex uint64
 	for _, entry := range rd.CommittedEntries {
 		sv.redo(func() error {
-			return sv.applyEntry(entry)
+			return sv.applyEntry(entry, writers)
 		})
 		lastEntryIndex = entry.Index
 	}
@@ -287,35 +288,20 @@ func replyReadIndex(rdIndices map[string]chan uint64, readStates []raft.ReadStat
 	}
 }
 
-func replyWriteIndex(wIndices map[string]chan uint64, committedEntries []raftpb.Entry) {
-	var p proposal
-	for _, entry := range committedEntries {
-		err := json.Unmarshal(entry.Data, &p)
-		if err != nil {
-			continue
-		}
-		ch, ok := wIndices[string(p.Wctx)]
-		if ok {
-			ch <- entry.Index
-		}
-	}
-}
-
 // runUpdates runs forever, reading and processing updates from raft
 // onto local storage.
 func (sv *Service) runUpdates(wal *wal.WAL) {
 	rdIndices := make(map[string]chan uint64)
-	wIndices := make(map[string]chan uint64)
+	writers := make(map[string]chan bool)
 	for {
 		select {
 		case rd := <-sv.raftNode.Ready():
 			replyReadIndex(rdIndices, rd.ReadStates)
-			replyWriteIndex(wIndices, rd.CommittedEntries)
-			sv.runUpdatesReady(rd, wal)
+			sv.runUpdatesReady(rd, wal, writers)
 		case req := <-sv.rctxReq:
 			rdIndices[string(req.rctx)] = req.index
 		case req := <-sv.wctxReq:
-			wIndices[string(req.wctx)] = req.index
+			writers[string(req.wctx)] = req.satisfied
 		}
 	}
 }
@@ -339,7 +325,7 @@ func (sv *Service) Set(ctx context.Context, key, val string) error {
 	if err != nil {
 		return errors.Wrap(err)
 	}
-	req := wctxReq{wctx: wctx, index: make(chan uint64)}
+	req := wctxReq{wctx: wctx, satisfied: make(chan bool)}
 	sv.wctxReq <- req
 	err = sv.raftNode.Propose(ctx, data)
 	if err != nil {
@@ -348,12 +334,51 @@ func (sv *Service) Set(ctx context.Context, key, val string) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, time.Minute) //TODO: realistic timeout
 	defer cancel()
+
 	select {
-	case idx := <-req.index:
-		sv.wait(idx)
+	case ok := <-req.satisfied:
+		if !ok {
+			return ErrUnsatisfied
+		}
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
+	}
+}
+
+//
+func (sv *Service) allocNodeID(ctx context.Context) (uint64, error) {
+	// encode w/ json for now: b with a wctx rand id
+	// lock state via mutex to pull nextID val, then call increment
+retry:
+	sv.stateMu.Lock()
+	nextID := sv.state.NextNodeID()
+	sv.stateMu.Unlock()
+	b := state.IncrementNextNodeID(nextID)
+	wctx := randID()
+	prop := proposal{Wctx: wctx, Operation: b}
+	data, err := json.Marshal(prop)
+	if err != nil {
+		return 0, errors.Wrap(err)
+	}
+	req := wctxReq{wctx: wctx, satisfied: make(chan bool)}
+	sv.wctxReq <- req
+	err = sv.raftNode.Propose(ctx, data)
+	if err != nil {
+		sv.wctxReq <- wctxReq{wctx: wctx}
+		return 0, errors.Wrap(err)
+	}
+	ctx, cancel := context.WithTimeout(ctx, time.Minute) //TODO: realistic timeout
+	defer cancel()
+
+	select {
+	case ok := <-req.satisfied:
+		if !ok {
+			goto retry
+		}
+		return nextID, nil
+	case <-ctx.Done():
+		return 0, ctx.Err()
 	}
 }
 
@@ -429,16 +454,10 @@ func (sv *Service) serveJoin(w http.ResponseWriter, req *http.Request) {
 
 	log.Write(req.Context(), "at", "join", "addr", x.Addr)
 
-	// TODO(kr): we need to ensure a node id is never reused,
-	// and this isn't sufficient. What if the max node got
-	// removed? We need a monotonic counter somewhere.
-	// (In the application state?)
-	// Also, this is racy when concurrent joins happen.
-	var newID uint64 = 2
-	for _, id := range sv.confState.Nodes {
-		if id >= newID {
-			newID = id + 1
-		}
+	newID, err := sv.allocNodeID(req.Context())
+	if err != nil {
+		http.Error(w, err.Error(), 400)
+		return
 	}
 
 	log.Write(req.Context(), "at", "join-id", "addr", x.Addr, "id", newID)
@@ -550,7 +569,7 @@ func (sv *Service) evict(nodeID uint64) {
 	//}
 }
 
-func (sv *Service) applyEntry(ent raftpb.Entry) error {
+func (sv *Service) applyEntry(ent raftpb.Entry, writers map[string]chan bool) error {
 	log.Write(context.Background(), "index", ent.Index, "ent", ent)
 
 	switch ent.Type {
@@ -588,14 +607,21 @@ func (sv *Service) applyEntry(ent raftpb.Entry) error {
 	case raftpb.EntryNormal:
 		log.Write(context.Background(), "EntryNormal", ent)
 		sv.stateMu.Lock()
+		defer sv.stateCond.Broadcast()
+		defer sv.stateMu.Unlock()
 		var p proposal
 		err := json.Unmarshal(ent.Data, &p)
 		if err != nil {
 			return errors.Wrap(err)
 		}
-		sv.state.Apply(p.Operation, ent.Index)
-		sv.stateCond.Broadcast()
-		sv.stateMu.Unlock()
+		satisfied, err := sv.state.Apply(p.Operation, ent.Index)
+		if err != nil {
+			return errors.Wrap(err)
+		}
+		// send 'satisfied' over channel to caller
+		if c := writers[string(p.Wctx)]; c != nil {
+			c <- satisfied
+		}
 	default:
 		return errors.Wrap(fmt.Errorf("unknown entry type: %v", ent))
 	}
@@ -684,7 +710,7 @@ func (sv *Service) recover() (*wal.WAL, error) {
 	sv.raftStorage.SetHardState(st)
 	sv.raftStorage.Append(ents)
 	for _, ent := range ents {
-		err = sv.applyEntry(ent)
+		err = sv.applyEntry(ent, nil)
 		if err != nil {
 			return nil, err
 		}

@@ -8,6 +8,8 @@ import (
 	"chain/log"
 )
 
+var ErrAlreadyApplied = errors.New("entry already applied")
+
 // TODO(kr): what data type should we really use?
 
 // State is a general-purpose data store designed to accumulate
@@ -69,37 +71,47 @@ func (s *State) Snapshot() ([]byte, uint64, error) {
 }
 
 // Apply applies a raft log entry payload to s.
-func (s *State) Apply(data []byte, index uint64) error {
+// For conditional operations returns whether codition was satisfied
+// in addition to any errors.
+func (s *State) Apply(data []byte, index uint64) (satisfied bool, err error) {
 	if index < s.appliedIndex {
-		return nil
+		return false, ErrAlreadyApplied
 	}
 	if s.state == nil {
 		s.state = make(map[string]string)
+
+	}
+	if s.nextNodeID == 0 {
+		s.nextNodeID = 2 //1 is used by first node on init
 	}
 	// TODO(kr): figure out a better entry encoding
 	var x interface{}
-	err := json.Unmarshal(data, &x)
+	err = json.Unmarshal(data, &x)
 	if err != nil {
 		// An error here indicates a malformed update
 		// was written to the raft log. We do version
 		// negotiation in the transport layer, so this
 		// should be impossible; by this point, we are
 		// all speaking the same version.
-		return errors.Wrap(err)
+		return false, errors.Wrap(err)
 	}
 	switch x := x.(type) {
 	case float64: //json doesn't unmarshal interface to uint64
 		if uint64(x) == s.nextNodeID {
 			s.nextNodeID++
+			satisfied = true
 		}
 	case map[string]interface{}:
 		for k, v := range x {
 			s.state[k] = v.(string)
 		}
+		satisfied = true
+	default:
+		return false, errors.New("unknown operation type")
 	}
 
 	s.appliedIndex = index
-	return nil
+	return satisfied, nil
 }
 
 // Provisional read operation.
@@ -125,6 +137,9 @@ func (s *State) AppliedIndex() uint64 {
 
 // IDCounter
 func (s *State) NextNodeID() uint64 {
+	if s.nextNodeID == 0 {
+		return 2 //1 is used by first node on init
+	}
 	return s.nextNodeID
 }
 
