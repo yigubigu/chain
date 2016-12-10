@@ -312,27 +312,21 @@ func runTicks(rn raft.Node) {
 	}
 }
 
-// Set sets a value in the key-value storage.
-// If successful, it returns after the value is committed to
-// the raft log.
-// TODO (ameets): possibly RawNode in future to know whether Proposal worked or not
-func (sv *Service) Set(ctx context.Context, key, val string) error {
-	// encode w/ json for now: b with a wctx rand id
-	b := state.Set(key, val)
-	wctx := randID()
-	prop := proposal{Wctx: wctx, Operation: b}
+//
+func (sv *Service) exec(ctx context.Context, instruction []byte) error {
+	prop := proposal{Wctx: randID(), Operation: instruction}
 	data, err := json.Marshal(prop)
 	if err != nil {
 		return errors.Wrap(err)
 	}
-	req := wctxReq{wctx: wctx, satisfied: make(chan bool)}
+	req := wctxReq{wctx: prop.Wctx, satisfied: make(chan bool)}
 	sv.wctxReq <- req
 	err = sv.raftNode.Propose(ctx, data)
 	if err != nil {
-		sv.wctxReq <- wctxReq{wctx: wctx}
+		sv.wctxReq <- wctxReq{wctx: prop.Wctx} //TODO (ameets): actually implement
 		return errors.Wrap(err)
 	}
-	ctx, cancel := context.WithTimeout(ctx, time.Minute) //TODO: realistic timeout
+	ctx, cancel := context.WithTimeout(ctx, time.Minute) //TODO realistic timeout
 	defer cancel()
 
 	select {
@@ -346,40 +340,30 @@ func (sv *Service) Set(ctx context.Context, key, val string) error {
 	}
 }
 
+// Set sets a value in the key-value storage.
+// If successful, it returns after the value is committed to
+// the raft log.
+// TODO (ameets): possibly RawNode in future to know whether Proposal worked or not
+func (sv *Service) Set(ctx context.Context, key, val string) error {
+	// encode w/ json for now: b with a wctx rand id
+	b := state.Set(key, val)
+	return sv.exec(ctx, b)
+}
+
 //
 func (sv *Service) allocNodeID(ctx context.Context) (uint64, error) {
 	// encode w/ json for now: b with a wctx rand id
 	// lock state via mutex to pull nextID val, then call increment
-retry:
-	sv.stateMu.Lock()
-	nextID := sv.state.NextNodeID()
-	sv.stateMu.Unlock()
-	b := state.IncrementNextNodeID(nextID)
-	wctx := randID()
-	prop := proposal{Wctx: wctx, Operation: b}
-	data, err := json.Marshal(prop)
-	if err != nil {
-		return 0, errors.Wrap(err)
+	err := ErrUnsatisfied
+	var nextID uint64
+	for err == ErrUnsatisfied {
+		sv.stateMu.Lock()
+		nextID = sv.state.NextNodeID()
+		sv.stateMu.Unlock()
+		b := state.IncrementNextNodeID(nextID)
+		err = sv.exec(ctx, b)
 	}
-	req := wctxReq{wctx: wctx, satisfied: make(chan bool)}
-	sv.wctxReq <- req
-	err = sv.raftNode.Propose(ctx, data)
-	if err != nil {
-		sv.wctxReq <- wctxReq{wctx: wctx}
-		return 0, errors.Wrap(err)
-	}
-	ctx, cancel := context.WithTimeout(ctx, time.Minute) //TODO: realistic timeout
-	defer cancel()
-
-	select {
-	case ok := <-req.satisfied:
-		if !ok {
-			goto retry
-		}
-		return nextID, nil
-	case <-ctx.Done():
-		return 0, ctx.Err()
-	}
+	return nextID, err //caller should check for error b/c value of nextID is untrustworthy in that case
 }
 
 // Get gets a value from the key-value store.
