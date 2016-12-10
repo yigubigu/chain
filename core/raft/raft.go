@@ -299,9 +299,17 @@ func (sv *Service) runUpdates(wal *wal.WAL) {
 			replyReadIndex(rdIndices, rd.ReadStates)
 			sv.runUpdatesReady(rd, wal, writers)
 		case req := <-sv.rctxReq:
-			rdIndices[string(req.rctx)] = req.index
+			if req.index == nil {
+				delete(rdIndices, string(req.rctx))
+			} else {
+				rdIndices[string(req.rctx)] = req.index
+			}
 		case req := <-sv.wctxReq:
-			writers[string(req.wctx)] = req.satisfied
+			if req.satisfied == nil {
+				delete(writers, string(req.wctx))
+			} else {
+				writers[string(req.wctx)] = req.satisfied
+			}
 		}
 	}
 }
@@ -319,11 +327,11 @@ func (sv *Service) exec(ctx context.Context, instruction []byte) error {
 	if err != nil {
 		return errors.Wrap(err)
 	}
-	req := wctxReq{wctx: prop.Wctx, satisfied: make(chan bool)}
+	req := wctxReq{wctx: prop.Wctx, satisfied: make(chan bool, 1)} //buffered channel
 	sv.wctxReq <- req
 	err = sv.raftNode.Propose(ctx, data)
 	if err != nil {
-		sv.wctxReq <- wctxReq{wctx: prop.Wctx} //TODO (ameets): actually implement
+		sv.wctxReq <- wctxReq{wctx: prop.Wctx}
 		return errors.Wrap(err)
 	}
 	ctx, cancel := context.WithTimeout(ctx, time.Minute) //TODO realistic timeout
@@ -374,16 +382,20 @@ func (sv *Service) allocNodeID(ctx context.Context) (uint64, error) {
 // Set won't have changed the value again, but it is
 // guaranteed not to read stale data.)
 // This can be slow; for faster but possibly stale reads, see Stale.
-func (sv *Service) Get(key string) string {
+func (sv *Service) Get(key string) (string, error) {
 	ctx := context.TODO()
 	// TODO (ameets)[WIP] possibly refactor, maybe read while holding the lock?
 	rctx := randID()
-	req := rctxReq{rctx: rctx, index: make(chan uint64)}
+	req := rctxReq{rctx: rctx, index: make(chan uint64, 1)}
 	sv.rctxReq <- req
-	sv.raftNode.ReadIndex(ctx, rctx)
+	err := sv.raftNode.ReadIndex(ctx, rctx)
+	if err != nil {
+		sv.rctxReq <- rctxReq{rctx: rctx}
+		return "", err
+	}
 	idx := <-req.index
 	sv.wait(idx)
-	return sv.Stale().Get(key)
+	return sv.Stale().Get(key), nil
 }
 
 func (sv *Service) wait(index uint64) {
