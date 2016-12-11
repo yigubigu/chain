@@ -146,11 +146,21 @@ unary_operator  = "!"|"-"|"~"
 unary_operation = unary_operator expression
 ```
 
+### Index Operation
+
+```
+index_operation = list:expression "[" i:expression "]"
+```
+
+Evaluates to the `i`th element of the `list` expression. If `i` does not evaluate to an integer, or the `list` expression does not evaluate to a list, compilation fails with an error.
+
 ### Slice Operation
 
 ```
 slice_operation = expression "[" start:expression ":" end:expression "]"
 ```
+
+Evaluates to the elements of the `list` expression with index `i` such that `start <= i < end`. If `i` does not evaluate to an integer, or the `list` expression does not evaluate to a list, compilation fails with an error.
 
 ### Binary Operation
 
