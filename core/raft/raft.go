@@ -59,6 +59,7 @@ type Service struct {
 	mux     *http.ServeMux
 	rctxReq chan rctxReq
 	wctxReq chan wctxReq
+	message chan raftpb.Message
 
 	errMu sync.Mutex
 	err   error
@@ -70,7 +71,7 @@ type Service struct {
 	// All client code accesses the cluster state via our Service
 	// object, which keeps a local, in-memory copy of the
 	// complete current state.
-	raftNode    raft.Node
+	raftNode    *raft.RawNode
 	raftStorage *raft.MemoryStorage
 
 	// The actual replicated data set.
@@ -90,8 +91,9 @@ type rctxReq struct {
 }
 
 type wctxReq struct {
-	wctx      []byte
-	satisfied chan bool
+	wctx []byte
+	data []byte
+	err  chan error
 }
 
 type proposal struct {
@@ -176,7 +178,10 @@ func Start(laddr, dir, bootURL string) (*Service, error) {
 	}
 
 	if walobj != nil {
-		sv.raftNode = raft.RestartNode(c)
+		sv.raftNode, err = raft.NewRawNode(c, nil)
+		if err != nil {
+			return nil, errors.Wrap(err)
+		}
 	} else if bootURL != "" {
 		log.Write(ctx, "raftid", c.ID)
 		err = writeID(sv.dir, c.ID)
@@ -187,7 +192,10 @@ func Start(laddr, dir, bootURL string) (*Service, error) {
 		if err != nil {
 			return nil, errors.Wrap(err)
 		}
-		sv.raftNode = raft.RestartNode(c)
+		sv.raftNode, err = raft.NewRawNode(c, nil)
+		if err != nil {
+			return nil, errors.Wrap(err)
+		}
 	} else {
 		log.Write(ctx, "raftid", c.ID)
 		err = writeID(sv.dir, c.ID)
@@ -198,11 +206,13 @@ func Start(laddr, dir, bootURL string) (*Service, error) {
 		if err != nil {
 			return nil, errors.Wrap(err)
 		}
-		sv.raftNode = raft.StartNode(c, []raft.Peer{{ID: 1, Context: []byte(laddr)}})
+		sv.raftNode, err = raft.NewRawNode(c, []raft.Peer{{ID: 1, Context: []byte(laddr)}})
+		if err != nil {
+			return nil, errors.Wrap(err)
+		}
 	}
 
 	go sv.runUpdates(walobj)
-	go runTicks(sv.raftNode)
 	return sv, nil
 }
 
@@ -216,7 +226,7 @@ func (sv *Service) Err() error {
 	return sv.err
 }
 
-func (sv *Service) runUpdatesReady(rd raft.Ready, wal *wal.WAL, writers map[string]chan bool) {
+func (sv *Service) runUpdatesReady(rd raft.Ready, wal *wal.WAL, writers map[string]chan error) {
 	wal.Save(rd.HardState, rd.Entries)
 	if !raft.IsEmptySnap(rd.Snapshot) {
 		sv.redo(func() error {
@@ -265,12 +275,12 @@ func (sv *Service) runUpdatesReady(rd raft.Ready, wal *wal.WAL, writers map[stri
 			return sv.triggerSnapshot()
 		})
 	}
-	sv.raftNode.Advance()
+	sv.raftNode.Advance(rd)
 
 	if sv.id == 1 && len(rd.Entries) > 0 && rd.Entries[len(rd.Entries)-1].Index <= 2 {
 		// Don't wait for ElectionTick ticks before becoming first leader
 		// in a fresh single-node cluster; do it immediately.
-		err := sv.raftNode.Campaign(context.Background())
+		err := sv.raftNode.Campaign()
 		if err != nil {
 			// oh well, we will campaign anyway after ElectionTick
 			log.Error(context.Background(), err)
@@ -292,32 +302,38 @@ func replyReadIndex(rdIndices map[string]chan uint64, readStates []raft.ReadStat
 // runUpdates runs forever, reading and processing updates from raft
 // onto local storage.
 func (sv *Service) runUpdates(wal *wal.WAL) {
+	ticks := time.Tick(tickDur)
 	rdIndices := make(map[string]chan uint64)
-	writers := make(map[string]chan bool)
+	writers := make(map[string]chan error)
 	for {
-		select {
-		case rd := <-sv.raftNode.Ready():
+		if sv.raftNode.HasReady() {
+			rd := sv.raftNode.Ready()
 			replyReadIndex(rdIndices, rd.ReadStates)
 			sv.runUpdatesReady(rd, wal, writers)
-		case req := <-sv.rctxReq:
-			if req.index == nil {
-				delete(rdIndices, string(req.rctx))
-			} else {
-				rdIndices[string(req.rctx)] = req.index
-			}
-		case req := <-sv.wctxReq:
-			if req.satisfied == nil {
-				delete(writers, string(req.wctx))
-			} else {
-				writers[string(req.wctx)] = req.satisfied
-			}
 		}
-	}
-}
 
-func runTicks(rn raft.Node) {
-	for range time.Tick(tickDur) {
-		rn.Tick()
+		// TODO(kr): check for proposals that are abandoned
+
+		select {
+		case req := <-sv.rctxReq:
+			rdIndices[string(req.rctx)] = req.index
+			sv.raftNode.ReadIndex(req.rctx)
+		case req := <-sv.wctxReq:
+			writers[string(req.wctx)] = req.err
+			err := sv.raftNode.Propose(req.data)
+			if err != nil {
+				delete(writers, string(req.wctx))
+				req.err <- err
+				break
+			}
+		case m := <-sv.message:
+			err := sv.raftNode.Step(m)
+			if err != nil {
+				log.Error(context.Background(), err)
+			}
+		case <-ticks:
+			sv.raftNode.Tick()
+		}
 	}
 }
 
@@ -328,22 +344,16 @@ func (sv *Service) exec(ctx context.Context, instruction []byte) error {
 	if err != nil {
 		return errors.Wrap(err)
 	}
-	req := wctxReq{wctx: prop.Wctx, satisfied: make(chan bool, 1)} //buffered channel
-	sv.wctxReq <- req
-	err = sv.raftNode.Propose(ctx, data)
-	if err != nil {
-		sv.wctxReq <- wctxReq{wctx: prop.Wctx}
-		return errors.Wrap(err)
+	errc := make(chan error, 1)
+	sv.wctxReq <- wctxReq{
+		wctx: prop.Wctx,
+		data: data,
+		err:  errc,
 	}
-	ctx, cancel := context.WithTimeout(ctx, time.Minute) //TODO realistic timeout
-	defer cancel()
 
 	select {
-	case ok := <-req.satisfied:
-		if !ok {
-			return ErrUnsatisfied
-		}
-		return nil
+	case err = <-errc:
+		return err
 	case <-ctx.Done():
 		return ctx.Err()
 	}
@@ -386,16 +396,9 @@ func (sv *Service) allocNodeID(ctx context.Context) (uint64, error) {
 func (sv *Service) Get(key string) (string, error) {
 	ctx := context.TODO()
 	// TODO (ameets)[WIP] possibly refactor, maybe read while holding the lock?
-	rctx := randID()
-	req := rctxReq{rctx: rctx, index: make(chan uint64, 1)}
-	sv.rctxReq <- req
-	err := sv.raftNode.ReadIndex(ctx, rctx)
-	if err != nil {
-		sv.rctxReq <- rctxReq{rctx: rctx}
-		return "", err
-	}
-	idx := <-req.index
-	sv.wait(idx)
+	indexc := make(chan uint64, 1)
+	sv.rctxReq <- rctxReq{randID(), indexc}
+	sv.wait(<-indexc)
 	return sv.Stale().Get(key), nil
 }
 
@@ -438,7 +441,7 @@ func (sv *Service) serveMsg(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "cannot unmarshal: "+err.Error(), 400)
 		return
 	}
-	sv.raftNode.Step(req.Context(), m)
+	sv.message <- m
 }
 
 func (sv *Service) serveJoin(w http.ResponseWriter, req *http.Request) {
@@ -566,7 +569,7 @@ func (sv *Service) evict(nodeID uint64) {
 	//}
 }
 
-func (sv *Service) applyEntry(ent raftpb.Entry, writers map[string]chan bool) error {
+func (sv *Service) applyEntry(ent raftpb.Entry, writers map[string]chan error) error {
 	log.Write(context.Background(), "index", ent.Index, "ent", ent)
 
 	switch ent.Type {
