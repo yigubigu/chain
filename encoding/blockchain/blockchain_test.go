@@ -264,7 +264,7 @@ func TestExtensibleString(t *testing.T) {
 			t.Errorf("got no error, want ErrLeftover")
 		case ErrLeftover:
 		default:
-			t.Errorf("got error %s, want ErrLeftover")
+			t.Errorf("got error %s, want ErrLeftover", err)
 		}
 	}
 }
