@@ -55,6 +55,7 @@ func TestRecoverSnapshotNoAdditionalBlocks(t *testing.T) {
 }
 
 func createEmptyBlock(block *bc.Block, snapshot *state.Snapshot) *bc.Block {
+	root, _ := validation.CalcMerkleRoot(nil)
 	return &bc.Block{
 		BlockHeader: bc.BlockHeader{
 			Version:                bc.NewBlockVersion,
@@ -62,7 +63,7 @@ func createEmptyBlock(block *bc.Block, snapshot *state.Snapshot) *bc.Block {
 			PreviousBlockHash:      block.Hash(),
 			TimestampMS:            bc.Millis(time.Now()),
 			ConsensusProgram:       block.ConsensusProgram,
-			TransactionsMerkleRoot: validation.CalcMerkleRoot(nil),
+			TransactionsMerkleRoot: root,
 			AssetsMerkleRoot:       snapshot.Tree.RootHash(),
 		},
 	}

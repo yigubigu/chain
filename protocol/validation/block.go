@@ -141,7 +141,10 @@ func validateBlockHeader(prev *bc.BlockHeader, block *bc.Block) error {
 		}
 	}
 
-	txMerkleRoot := CalcMerkleRoot(block.Transactions)
+	txMerkleRoot, err := CalcMerkleRoot(block.Transactions)
+	if err != nil {
+		return err
+	}
 	// can be modified to allow soft fork
 	if block.TransactionsMerkleRoot != txMerkleRoot {
 		return ErrBadTxRoot
