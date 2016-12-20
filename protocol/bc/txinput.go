@@ -294,7 +294,7 @@ func (t *TxInput) SetArguments(args [][]byte) {
 	}
 }
 
-func (t *TxInput) WitnessHash() (h Hash, err error) {
+func (t *TxInput) witnessHash() (h Hash, err error) {
 	sha := sha3pool.Get256()
 	defer sha3pool.Put256(sha)
 	err = t.writeInputWitness(sha)
