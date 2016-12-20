@@ -111,6 +111,8 @@ func WriteVarstrList(w io.Writer, l [][]byte) (int, error) {
 	return n, err
 }
 
+// ReadVarstrList reads a varint31 length prefix followed by that many
+// varstrs.
 func ReadVarstrList(r io.Reader) ([][]byte, int, error) {
 	nelts, n, err := ReadVarint31(r)
 	if err != nil {
@@ -131,6 +133,8 @@ func ReadVarstrList(r io.Reader) ([][]byte, int, error) {
 	return result, n, nil
 }
 
+// WriteExtensibleString sends the output of the given function,
+// together with a varint31 length prefix, to w.
 func WriteExtensibleString(w io.Writer, f func(io.Writer) error) (int, error) {
 	buf := bufpool.Get()
 	defer bufpool.Put(buf)
@@ -143,6 +147,9 @@ func WriteExtensibleString(w io.Writer, f func(io.Writer) error) (int, error) {
 
 var ErrLeftover = errors.New("extensible string partially unconsumed")
 
+// ReadExtensibleString reads a varint31 length prefix and then calls
+// the given function to consume that many bytes. If all is true, it
+// is an error for any bytes to be left over.
 func ReadExtensibleString(r io.Reader, all bool, f func(io.Reader) error) (int, error) {
 	s, n, err := ReadVarstr31(r)
 	if err != nil {

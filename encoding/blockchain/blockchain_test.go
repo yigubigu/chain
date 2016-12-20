@@ -189,7 +189,7 @@ func TestEmptyVarstring31(t *testing.T) {
 
 func TestVarstrList(t *testing.T) {
 	for i := 0; i < 4; i++ {
-		// make a list of i+1 strs, each with length i+1, each make of repeating byte i
+		// make a list of i+1 strs, each with length i+1, each made of repeating byte i
 		strs := make([][]byte, 0, i+1)
 		for j := 0; j <= i; j++ {
 			str := make([]byte, 0, i+1)
