@@ -6,7 +6,6 @@ package generator
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"chain/database/pg"
@@ -33,9 +32,12 @@ type Generator struct {
 	chain   *protocol.Chain
 	signers []BlockSigner
 
-	mu         sync.Mutex
-	pool       []*bc.Tx // in topological order
-	poolHashes map[bc.Hash]bool
+	pool        []*bc.Tx // in topological order
+	poolHashes  map[bc.Hash]bool
+	incomingTxs chan *bc.Tx
+
+	pendingBlock    *bc.Block
+	pendingSnapshot *state.Snapshot
 
 	// latestBlock and latestSnapshot are current as long as this
 	// process remains the leader process. If the process is demoted,
@@ -52,24 +54,17 @@ func New(
 	db pg.DB,
 ) *Generator {
 	return &Generator{
-		db:         db,
-		chain:      c,
-		signers:    s,
-		poolHashes: make(map[bc.Hash]bool),
+		db:          db,
+		chain:       c,
+		signers:     s,
+		poolHashes:  make(map[bc.Hash]bool),
+		incomingTxs: make(chan *bc.Tx),
 	}
 }
 
 // Submit adds a new pending tx to the pending tx pool.
 func (g *Generator) Submit(ctx context.Context, tx *bc.Tx) error {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-
-	if g.poolHashes[tx.Hash] {
-		return nil
-	}
-
-	g.poolHashes[tx.Hash] = true
-	g.pool = append(g.pool, tx)
+	g.incomingTxs <- tx
 	return nil
 }
 
@@ -90,6 +85,7 @@ func (g *Generator) Generate(
 		log.Fatal(ctx, log.KeyError, err)
 	}
 	g.latestBlock, g.latestSnapshot = recoveredBlock, recoveredSnapshot
+	g.pendingSnapshot = state.Copy(recoveredSnapshot)
 
 	// Check to see if we already have a pending, generated block.
 	// This can happen if the leader process exits between generating
@@ -105,25 +101,95 @@ func (g *Generator) Generate(
 			log.Fatal(ctx, log.KeyError, err)
 		}
 
-		// g.commitBlock will update g.latestBlock and g.latestSnapshot.
 		err = g.commitBlock(ctx, b, s)
 		if err != nil {
 			log.Fatal(ctx, log.KeyError, err)
 		}
+		g.latestBlock, g.latestSnapshot = b, s
+		g.pendingSnapshot = state.Copy(s)
 	}
 
+	lastTick := time.Now()
 	ticks := time.Tick(period)
 	for {
 		select {
 		case <-ctx.Done():
 			log.Messagef(ctx, "Deposed, Generate exiting")
 			return
-		case <-ticks:
-			err := g.makeBlock(ctx)
-			health(err)
-			if err != nil {
-				log.Error(ctx, err)
+		case t := <-ticks:
+			lastTick = t
+			if g.pendingBlock == nil {
+				// No transactions have been received, so no block was
+				// created.
+				continue
 			}
+
+			// Finalize the pending block.
+			b := g.pendingBlock
+			b.TransactionsMerkleRoot = validation.CalcMerkleRoot(b.Transactions)
+			b.AssetsMerkleRoot = g.pendingSnapshot.Tree.RootHash()
+
+			err = savePendingBlock(ctx, g.db, b)
+			if err != nil {
+				health(err)
+				log.Error(ctx, err)
+				continue
+			}
+
+			err = g.commitBlock(ctx, b, g.pendingSnapshot)
+			if err != nil {
+				health(err)
+				log.Error(ctx, err)
+				// Give up on the pending block and start over.
+				g.pendingBlock = nil
+				g.pendingSnapshot = state.Copy(g.latestSnapshot)
+				continue
+			}
+
+			// We committed a new block. Update the pending and current state pointers.
+			health(nil)
+			g.latestBlock = b
+			g.latestSnapshot = g.pendingSnapshot
+			g.pendingBlock = nil
+			g.pendingSnapshot = state.Copy(g.latestSnapshot)
+
+		case tx := <-g.incomingTxs:
+			if g.poolHashes[tx.Hash] {
+				continue
+			}
+			if g.pendingBlock != nil && len(g.pendingBlock.Transactions) >= 10000 {
+				log.Messagef(ctx, "Dropping tx %s, current block already full", tx.Hash)
+				continue
+			}
+
+			// Create a new pending block if there's not one already.
+			if g.pendingBlock == nil {
+				g.pendingBlock = &bc.Block{
+					BlockHeader: bc.BlockHeader{
+						Version:           bc.NewBlockVersion,
+						Height:            g.latestBlock.Height + 1,
+						PreviousBlockHash: g.latestBlock.Hash(),
+						TimestampMS:       bc.Millis(lastTick.Add(period)),
+						ConsensusProgram:  g.latestBlock.ConsensusProgram,
+					},
+				}
+				g.pendingSnapshot.PruneIssuances(g.pendingBlock.TimestampMS)
+			}
+
+			err = g.chain.CheckIssuanceWindow(tx)
+			if err != nil {
+				continue // rejected
+			}
+			err = validation.ConfirmTx(g.pendingSnapshot, g.chain.InitialBlockHash, g.pendingBlock, tx)
+			if err != nil {
+				continue // rejected
+			}
+			err = validation.ApplyTx(g.pendingSnapshot, tx)
+			if err != nil {
+				continue // rejected
+			}
+			g.pendingBlock.Transactions = append(g.pendingBlock.Transactions, tx)
+			g.poolHashes[tx.Hash] = true
 		}
 	}
 }

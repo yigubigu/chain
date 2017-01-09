@@ -48,7 +48,7 @@ func (c *prevalidatedTxsCache) cache(txID bc.Hash, err error) {
 	c.mu.Unlock()
 }
 
-func (c *Chain) checkIssuanceWindow(tx *bc.Tx) error {
+func (c *Chain) CheckIssuanceWindow(tx *bc.Tx) error {
 	for _, txi := range tx.Inputs {
 		if _, ok := txi.TypedInput.(*bc.IssuanceInput); ok {
 			// TODO(tessr): consider removing 0 check once we can configure this

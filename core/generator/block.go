@@ -37,32 +37,6 @@ func recordSince(t0 time.Time) {
 	latency.RecordSince(t0)
 }
 
-// makeBlock generates a new bc.Block, collects the required signatures
-// and commits the block to the blockchain.
-func (g *Generator) makeBlock(ctx context.Context) error {
-	t0 := time.Now()
-	defer recordSince(t0)
-
-	g.mu.Lock()
-	txs := g.pool
-	g.pool = nil
-	g.poolHashes = make(map[bc.Hash]bool)
-	g.mu.Unlock()
-
-	b, s, err := g.chain.GenerateBlock(ctx, g.latestBlock, g.latestSnapshot, time.Now(), txs)
-	if err != nil {
-		return errors.Wrap(err, "generate")
-	}
-	if len(b.Transactions) == 0 {
-		return nil // don't bother making an empty block
-	}
-	err = savePendingBlock(ctx, g.db, b)
-	if err != nil {
-		return err
-	}
-	return g.commitBlock(ctx, b, s)
-}
-
 func (g *Generator) commitBlock(ctx context.Context, b *bc.Block, s *state.Snapshot) error {
 	err := g.getAndAddBlockSignatures(ctx, b, g.latestBlock)
 	if err != nil {
@@ -73,9 +47,6 @@ func (g *Generator) commitBlock(ctx context.Context, b *bc.Block, s *state.Snaps
 	if err != nil {
 		return errors.Wrap(err, "commit")
 	}
-
-	g.latestBlock = b
-	g.latestSnapshot = s
 	return nil
 }
 

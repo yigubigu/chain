@@ -72,8 +72,7 @@ func (c *Chain) GenerateBlock(ctx context.Context, prev *bc.Block, snapshot *sta
 			break
 		}
 
-		// TODO(jackson): Should this go in ConfirmTx too?
-		err = c.checkIssuanceWindow(tx)
+		err = c.CheckIssuanceWindow(tx)
 		if err != nil {
 			continue
 		}
