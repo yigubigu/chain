@@ -24,7 +24,7 @@ type IssuanceInput struct {
 func (ii *IssuanceInput) IsIssuance() bool { return true }
 
 func (ii *IssuanceInput) AssetID() AssetID {
-	return ComputeAssetID(ii.IssuanceProgram, ii.InitialBlock, ii.VMVersion)
+	return ComputeAssetID(ii.IssuanceProgram, ii.InitialBlock, ii.VMVersion, ii.AssetDefinitionHash())
 }
 
 func (ii1 *IssuanceInput) readCommitment(r io.Reader) (assetID AssetID, err error) {
