@@ -10,12 +10,16 @@ import (
 )
 
 type (
+	// TxInput is a transaction input. It contains fields common to all
+	// types of input, plus type-specific data satisfying the TypedInput
+	// interface.
 	TxInput struct {
 		AssetVersion  uint64
 		ReferenceData []byte
 		TypedInput
 	}
 
+	// TypedInput is the type-specific part of a transaction input.
 	TypedInput interface {
 		IsIssuance() bool
 		readWitness(r io.Reader, assetVersion uint64) error
@@ -61,7 +65,7 @@ func NewIssuanceInput(
 		TypedInput: &IssuanceInput{
 			Nonce:  nonce,
 			Amount: amount,
-			AssetWitness: AssetWitness{
+			IssuanceWitness: IssuanceWitness{
 				InitialBlock:    initialBlock,
 				AssetDefinition: assetDefinition,
 				VMVersion:       1,
@@ -146,7 +150,7 @@ func (t *TxInput) writeInputWitness(w io.Writer) (err error) {
 	if t.AssetVersion == 1 {
 		switch inp := t.TypedInput.(type) {
 		case *IssuanceInput:
-			return inp.AssetWitness.writeTo(w)
+			return inp.IssuanceWitness.writeTo(w)
 
 		case *SpendInput:
 			_, err = blockchain.WriteVarstrList(w, inp.Arguments)

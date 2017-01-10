@@ -204,7 +204,7 @@ func TestVerifyTxInput(t *testing.T) {
 	}, {
 		input: &bc.TxInput{
 			TypedInput: &bc.IssuanceInput{
-				AssetWitness: bc.AssetWitness{
+				IssuanceWitness: bc.IssuanceWitness{
 					VMVersion: 2,
 				},
 			},

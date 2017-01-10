@@ -8,6 +8,8 @@ import (
 	"chain/errors"
 )
 
+// OutputCommitment contains the commitment data for a transaction
+// output (which also appears in the spend input of that output).
 type OutputCommitment struct {
 	AssetAmount
 	VMVersion      uint64

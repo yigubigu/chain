@@ -9,7 +9,9 @@ import (
 	"chain/errors"
 )
 
-type AssetWitness struct {
+// Type IssuanceWitness contains the witness data for an issuance
+// input.
+type IssuanceWitness struct {
 	InitialBlock    Hash
 	AssetDefinition []byte
 	VMVersion       uint64
@@ -17,11 +19,11 @@ type AssetWitness struct {
 	Arguments       [][]byte
 }
 
-func (aw *AssetWitness) AssetID() AssetID {
+func (aw *IssuanceWitness) AssetID() AssetID {
 	return ComputeAssetID(aw.IssuanceProgram, aw.InitialBlock, aw.VMVersion, EmptyStringHash)
 }
 
-func (aw *AssetWitness) writeTo(w io.Writer) error {
+func (aw *IssuanceWitness) writeTo(w io.Writer) error {
 	_, err := w.Write(aw.InitialBlock[:])
 	if err != nil {
 		return err
@@ -42,7 +44,7 @@ func (aw *AssetWitness) writeTo(w io.Writer) error {
 	return err
 }
 
-func (aw *AssetWitness) readFrom(r io.Reader, assetVersion uint64) error {
+func (aw *IssuanceWitness) readFrom(r io.Reader, assetVersion uint64) error {
 	_, err := io.ReadFull(r, aw.InitialBlock[:])
 	if err != nil {
 		return errors.Wrap(err, "reading initial block hash")
@@ -67,7 +69,7 @@ func (aw *AssetWitness) readFrom(r io.Reader, assetVersion uint64) error {
 	return errors.Wrap(err, "reading arguments")
 }
 
-func (aw *AssetWitness) AssetDefinitionHash() (defhash Hash) {
+func (aw *IssuanceWitness) AssetDefinitionHash() (defhash Hash) {
 	sha := sha3pool.Get256()
 	defer sha3pool.Put256(sha)
 	sha.Write(aw.AssetDefinition)

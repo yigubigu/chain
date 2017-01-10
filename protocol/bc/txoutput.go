@@ -12,13 +12,12 @@ import (
 // TODO(bobg): Review serialization/deserialization logic for
 // assetVersions other than 1.
 
-type (
-	TxOutput struct {
-		AssetVersion uint64
-		OutputCommitment
-		ReferenceData []byte
-	}
-)
+// TxOutput is a transaction output.
+type TxOutput struct {
+	AssetVersion uint64
+	OutputCommitment
+	ReferenceData []byte
+}
 
 func NewTxOutput(assetID AssetID, amount uint64, controlProgram, referenceData []byte) *TxOutput {
 	return &TxOutput{

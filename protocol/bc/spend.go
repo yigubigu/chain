@@ -7,6 +7,8 @@ import (
 	"chain/errors"
 )
 
+// SpendInput satisfies the TypedInput interface and represents a
+// spend.
 type SpendInput struct {
 	// Commitment
 	Outpoint

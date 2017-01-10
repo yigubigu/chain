@@ -7,6 +7,8 @@ import (
 	"chain/errors"
 )
 
+// IssuanceInput satisfies the TypedInput interface and represents an
+// asset issuance.
 type IssuanceInput struct {
 	// Commitment
 	Nonce  []byte
@@ -18,7 +20,7 @@ type IssuanceInput struct {
 	// might not be present).
 
 	// Witness
-	AssetWitness
+	IssuanceWitness
 }
 
 func (ii *IssuanceInput) IsIssuance() bool { return true }
@@ -43,5 +45,5 @@ func (ii1 *IssuanceInput) readCommitment(r io.Reader) (assetID AssetID, err erro
 }
 
 func (ii1 *IssuanceInput) readWitness(r io.Reader, assetVersion uint64) error {
-	return ii1.AssetWitness.readFrom(r, assetVersion)
+	return ii1.IssuanceWitness.readFrom(r, assetVersion)
 }

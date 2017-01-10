@@ -34,6 +34,7 @@ func ComputeAssetID(issuanceProgram []byte, initialHash [32]byte, vmVersion uint
 	return assetID
 }
 
+// AssetAmount combines an asset id and an amount.
 type AssetAmount struct {
 	AssetID AssetID `json:"asset_id"`
 	Amount  uint64  `json:"amount"`

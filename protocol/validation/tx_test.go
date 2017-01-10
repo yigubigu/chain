@@ -984,7 +984,7 @@ func TestConfirmTx(t *testing.T) {
 					{
 						AssetVersion: 1,
 						TypedInput: &bc.IssuanceInput{
-							AssetWitness: bc.AssetWitness{
+							IssuanceWitness: bc.IssuanceWitness{
 								InitialBlock: bc.Hash{1},
 							},
 						},
