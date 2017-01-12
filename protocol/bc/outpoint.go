@@ -11,17 +11,13 @@ import (
 // transaction outputs.
 type Outpoint struct {
 	Hash  Hash   `json:"hash"`
-	Index uint32 `json:"index"`
+	Index uint32 `json:"index" bc:"varint31"`
 }
 
 // WriteTo writes p to w.
 func (p *Outpoint) WriteTo(w io.Writer) (int64, error) {
-	n, err := w.Write(p.Hash[:])
-	if err != nil {
-		return int64(n), err
-	}
-	n2, err := blockchain.WriteVarint31(w, uint64(p.Index))
-	return int64(n + n2), err
+	n, err := blockchain.Write(w, 0, false, p)
+	return int64(n), err
 }
 
 func (p *Outpoint) readFrom(r io.Reader) (int, error) {

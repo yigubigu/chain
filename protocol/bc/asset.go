@@ -52,11 +52,6 @@ func (a *AssetAmount) readFrom(r io.Reader) (int, error) {
 }
 
 func (a *AssetAmount) writeTo(w io.Writer) (int64, error) {
-	n, err := w.Write(a.AssetID[:])
-	if err != nil {
-		return int64(n), err
-	}
-	n2, err := blockchain.WriteVarint63(w, a.Amount)
-	n += n2
+	n, err := blockchain.Write(w, 0, false, a)
 	return int64(n), err
 }
