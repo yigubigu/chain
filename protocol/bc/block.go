@@ -142,19 +142,19 @@ type BlockHeader struct {
 	// TransactionsMerkleRoot is the root hash of the Merkle binary hash
 	// tree formed by the transaction witness hashes of all transactions
 	// included in the block.
-	TransactionsMerkleRoot Hash
+	TransactionsMerkleRoot Hash `bc:"extstr=1"`
 
 	// AssetsMerkleRoot is the root hash of the Merkle Patricia Tree of
 	// the set of unspent outputs with asset version 1 after applying
 	// the block.
-	AssetsMerkleRoot Hash
+	AssetsMerkleRoot Hash `bc:"extstr=1"`
 
 	// ConsensusProgram is the predicate for validating the next block.
-	ConsensusProgram []byte
+	ConsensusProgram []byte `bc:"extstr=1"`
 
 	// Witness is a vector of arguments to the previous block's
 	// ConsensusProgram for validating this block.
-	Witness [][]byte
+	Witness [][]byte `bc:"serflags=1,extstr=2"`
 }
 
 // Time returns the time represented by the Timestamp in bh.
@@ -281,52 +281,6 @@ func (bh *BlockHeader) WriteForSigTo(w io.Writer) (int64, error) {
 
 // writeTo writes bh to w.
 func (bh *BlockHeader) writeTo(w io.Writer, serflags uint8) error {
-	w.Write([]byte{serflags})
-
-	var err error
-
-	_, err = blockchain.WriteVarint63(w, bh.Version)
-	if err != nil {
-		return err
-	}
-	_, err = blockchain.WriteVarint63(w, bh.Height)
-	if err != nil {
-		return err
-	}
-	_, err = w.Write(bh.PreviousBlockHash[:])
-	if err != nil {
-		return err
-	}
-	_, err = blockchain.WriteVarint63(w, bh.TimestampMS)
-	if err != nil {
-		return err
-	}
-
-	_, err = blockchain.WriteExtensibleString(w, func(w io.Writer) error {
-		_, err := w.Write(bh.TransactionsMerkleRoot[:])
-		if err != nil {
-			return err
-		}
-		_, err = w.Write(bh.AssetsMerkleRoot[:])
-		if err != nil {
-			return err
-		}
-		_, err = blockchain.WriteVarstr31(w, bh.ConsensusProgram)
-		return err
-	})
-	if err != nil {
-		return err
-	}
-
-	if serflags&SerBlockWitness == SerBlockWitness {
-		_, err = blockchain.WriteExtensibleString(w, func(w io.Writer) error {
-			_, err := blockchain.WriteVarstrList(w, bh.Witness)
-			return err
-		})
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
+	_, err := blockchain.Write(w, serflags, true, bh)
+	return err
 }

@@ -100,7 +100,7 @@ func Write(w io.Writer, serflags uint8, writeFlags bool, obj interface{}) (n int
 
 func writeStructFields(w io.Writer, t reflect.Type, v reflect.Value, serflags uint8, idx, extStr int) (n, nextField int, err error) {
 	for i := idx; i < t.NumField(); i++ {
-		var int31 bool
+		var int31, omit bool
 
 		tf := t.Field(i)
 		if tag, ok := tf.Tag.Lookup(tagName); ok {
@@ -110,10 +110,31 @@ func writeStructFields(w io.Writer, t reflect.Type, v reflect.Value, serflags ui
 			}
 
 			int31 = parsedTag.int31
+			omit = (parsedTag.serflags != 0) && ((int(serflags) & parsedTag.serflags) == 0)
+
 			if parsedTag.extStr > 0 {
 				switch extStr {
 				case 0:
 					// Start a new extensible string.
+					if omit {
+						// Omit this extensible string. The caller resumes from
+						// the first field after the members of the extstr.
+						for j := i + 1; j < t.NumField(); j++ {
+							tf := t.Field(j)
+							if tag, ok := tf.Tag.Lookup(tagName); ok {
+								parsedTag2, err := parseTag(tag)
+								if err != nil {
+									return n, 0, err
+								}
+								if parsedTag2.extStr != parsedTag.extStr {
+									return n, j, nil
+								}
+							} else {
+								return n, j, nil
+							}
+						}
+						return n, t.NumField(), nil
+					}
 					n, err := WriteExtensibleString(w, func(w io.Writer) error {
 						_, nextField, err = writeStructFields(w, t, v, serflags, i, parsedTag.extStr)
 						return err
@@ -131,6 +152,11 @@ func writeStructFields(w io.Writer, t reflect.Type, v reflect.Value, serflags ui
 				}
 			}
 		}
+
+		if omit {
+			continue
+		}
+
 		vf := v.Field(i)
 		var intf interface{}
 		if int31 {
@@ -148,12 +174,16 @@ func writeStructFields(w io.Writer, t reflect.Type, v reflect.Value, serflags ui
 }
 
 type parsedTag struct {
-	int31  bool
-	extStr int
+	int31    bool
+	extStr   int
+	serflags int
 }
 
 func parseTag(tag string) (result parsedTag, err error) {
-	const extstrPrefix = "extstr="
+	const (
+		extstrPrefix   = "extstr="
+		serflagsPrefix = "serflags="
+	)
 
 	items := strings.Split(tag, ",")
 	for _, item := range items {
@@ -166,6 +196,13 @@ func parseTag(tag string) (result parsedTag, err error) {
 				return result, err
 			}
 			result.extStr = val
+		} else if strings.HasPrefix(item, serflagsPrefix) {
+			suffix := strings.TrimPrefix(item, serflagsPrefix)
+			val, err := strconv.Atoi(suffix)
+			if err != nil {
+				return result, err
+			}
+			result.serflags = val
 		}
 	}
 	return result, nil
