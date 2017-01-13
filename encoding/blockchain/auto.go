@@ -8,11 +8,21 @@ import (
 	"strings"
 )
 
-type BCWriterTo interface {
-	BCWriteTo(w io.Writer, serflags uint8) (int, error)
-}
+type (
+	BCWriterTo interface {
+		BCWriteTo(w io.Writer, serflags uint8) (int, error)
+	}
+	BCReaderFrom interface {
+		BCReadFrom(io.Reader) (int, error)
+	}
+)
 
-var bcWriterToType = reflect.TypeOf((*BCWriterTo)(nil)).Elem()
+var (
+	bcWriterToType   = reflect.TypeOf((*BCWriterTo)(nil)).Elem()
+	bcReaderFromType = reflect.TypeOf((*BCReaderFrom)(nil)).Elem()
+)
+
+const tagName = "bc"
 
 func Write(w io.Writer, serflags uint8, writeFlags bool, obj interface{}) (n int, err error) {
 	if writeFlags {
@@ -89,8 +99,6 @@ func Write(w io.Writer, serflags uint8, writeFlags bool, obj interface{}) (n int
 }
 
 func writeStructFields(w io.Writer, t reflect.Type, v reflect.Value, serflags uint8, idx, extStr int) (n, nextField int, err error) {
-	const tagName = "bc"
-
 	for i := idx; i < t.NumField(); i++ {
 		var int31 bool
 
@@ -168,4 +176,159 @@ type varint31 uint64
 
 func (v varint31) BCWriteTo(w io.Writer, _ uint8) (int, error) {
 	return WriteVarint31(w, uint64(v))
+}
+
+func (v *varint31) BCReadFrom(r io.Reader) (int, error) {
+	val, n, err := ReadVarint31(r)
+	if err != nil {
+		return n, err
+	}
+	*v = varint31(val)
+	return n, nil
+}
+
+func Read(r io.Reader, inp interface{}) (int, error) {
+	if readerFrom, ok := inp.(BCReaderFrom); ok {
+		return readerFrom.BCReadFrom(r)
+	}
+	t := reflect.TypeOf(inp)
+	if t.Kind() != reflect.Ptr {
+		return 0, fmt.Errorf("blockchain.Read called with a non-pointer argument (%s)", t.Kind())
+	}
+	return readVal(r, reflect.ValueOf(inp).Elem())
+}
+
+func readVal(r io.Reader, v reflect.Value) (n int, err error) {
+	t := v.Type()
+
+	switch t.Kind() {
+	case reflect.Uint8:
+		var b [1]byte
+		n, err = io.ReadFull(r, b[:])
+		if err != nil {
+			return n, err
+		}
+		v.SetUint(uint64(b[0]))
+		return n, nil
+
+	case reflect.Uint64:
+		val, n, err := ReadVarint63(r)
+		if err != nil {
+			return n, err
+		}
+		v.SetUint(val)
+		return n, nil
+
+	case reflect.Array:
+		if t.Elem().Kind() == reflect.Uint8 {
+			// fixed-length array of bytes gets read as-is
+			l := t.Len()
+			s := make([]byte, l, l)
+			n, err := io.ReadFull(r, s[:])
+			if err != nil {
+				return n, err
+			}
+			sv := reflect.ValueOf(s)
+			reflect.Copy(v, sv)
+			return n, nil
+		}
+		return n, fmt.Errorf("blockchain.Read cannot handle arrays of %s", t.Elem().Kind())
+
+	case reflect.Slice:
+		t2 := t.Elem()
+		if t2.Kind() == reflect.Slice && t2.Elem().Kind() == reflect.Uint8 {
+			// v is a [][]byte
+			b, n, err := ReadVarstrList(r)
+			if err != nil {
+				return n, err
+			}
+			v.Set(reflect.ValueOf(b))
+			return n, nil
+		}
+		// v is a []SomethingElse. Read a length prefix and then
+		// (recursively) the elements of v one after another.
+		count, n, err := ReadVarint31(r)
+		if err != nil {
+			return n, err
+		}
+		res := reflect.MakeSlice(t2, 0, int(count))
+		for i := uint32(0); i < count; i++ {
+			elVal := reflect.New(t2)
+			n2, err := readVal(r, elVal)
+			n += n2
+			if err != nil {
+				return n, err
+			}
+			res = reflect.Append(res, elVal)
+		}
+		v.Set(res)
+		return n, err
+
+	case reflect.Struct:
+		l := t.NumField()
+		var nextField int
+		for nextField < l {
+			var n2 int
+			n2, nextField, err = readStructFields(r, t, v, nextField, 0)
+			n += n2
+			if err != nil {
+				return n, err
+			}
+		}
+		return n, nil
+	}
+
+	return n, fmt.Errorf("blockchain.Read cannot handle objects of type %s", t.Kind())
+}
+
+func readStructFields(r io.Reader, t reflect.Type, v reflect.Value, idx, extStr int) (n, nextField int, err error) {
+	for i := idx; i < t.NumField(); i++ {
+		var int31 bool
+
+		tf := t.Field(i)
+		if tag, ok := tf.Tag.Lookup(tagName); ok {
+			parsedTag, err := parseTag(tag)
+			if err != nil {
+				return n, 0, err
+			}
+			int31 = parsedTag.int31
+			if parsedTag.extStr > 0 {
+				switch extStr {
+				case 0:
+					// Start reading from a new extensible string.
+					n, err := ReadExtensibleString(r, true, func(r io.Reader) error { // xxx "all" argument slated for removal
+						_, nextField, err = readStructFields(r, t, v, i, parsedTag.extStr)
+						return err
+					})
+					// Allow caller to resume from this point.
+					return n, nextField, err
+
+				case parsedTag.extStr:
+					// Already in an extensible string, proceed normally (below).
+
+				default:
+					// Already in an extensible string that has ended. Return
+					// and allow the caller to start a new one.
+					return n, i, nil
+				}
+			}
+		}
+		vf := v.Field(i)
+		if int31 {
+			var x varint31
+			n2, err := Read(r, &x)
+			n += n2
+			if err != nil {
+				return n, 0, err
+			}
+			vf.SetUint(uint64(x))
+		} else {
+			n2, err := readVal(r, vf)
+			n += n2
+			if err != nil {
+				return n, 0, err
+			}
+		}
+	}
+	return n, t.NumField(), nil
 }

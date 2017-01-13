@@ -21,13 +21,7 @@ func (p *Outpoint) WriteTo(w io.Writer) (int64, error) {
 }
 
 func (p *Outpoint) readFrom(r io.Reader) (int, error) {
-	n1, err := io.ReadFull(r, p.Hash[:])
-	if err != nil {
-		return n1, err
-	}
-	var n2 int
-	p.Index, n2, err = blockchain.ReadVarint31(r)
-	return n1 + n2, err
+	return blockchain.Read(r, p)
 }
 
 // String returns the Outpoint in the human-readable form "hash:index".

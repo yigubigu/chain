@@ -42,13 +42,7 @@ type AssetAmount struct {
 
 // assumes r has sticky errors
 func (a *AssetAmount) readFrom(r io.Reader) (int, error) {
-	n1, err := io.ReadFull(r, a.AssetID[:])
-	if err != nil {
-		return n1, err
-	}
-	var n2 int
-	a.Amount, n2, err = blockchain.ReadVarint63(r)
-	return n1 + n2, err
+	return blockchain.Read(r, a)
 }
 
 func (a *AssetAmount) writeTo(w io.Writer) (int64, error) {
