@@ -20,7 +20,7 @@ const CurrentTransactionVersion = 1
 // Tx holds a transaction along with its hash.
 type Tx struct {
 	TxData
-	Hash Hash
+	Hash Hash `bc:"omit"`
 }
 
 func (tx *Tx) UnmarshalText(p []byte) error {
