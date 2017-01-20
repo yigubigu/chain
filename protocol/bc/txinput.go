@@ -127,7 +127,7 @@ func (t *TxInput) readFrom(r io.Reader, txVersion uint64) (err error) {
 				if err != nil {
 					return err
 				}
-				_, err = si.OutputCommitment.readFrom(r, txVersion, 1)
+				err = si.OutputCommitment.readFrom(r, 1)
 				if err != nil {
 					return err
 				}
@@ -257,8 +257,7 @@ func (t *TxInput) WriteInputCommitment(w io.Writer) error {
 				return err
 			}
 			_, err = blockchain.WriteExtensibleString(w, func(w io.Writer) error {
-				_, err := inp.OutputCommitment.WriteTo(w)
-				return err
+				return inp.writePrevoutCommitment(w)
 			})
 			return err
 		}

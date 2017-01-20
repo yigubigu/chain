@@ -1,5 +1,7 @@
 package bc
 
+import "io"
+
 // SpendInput satisfies the TypedInput interface and represents a spend transaction.
 type SpendInput struct {
 	// Commitment
@@ -11,6 +13,10 @@ type SpendInput struct {
 }
 
 func (si *SpendInput) IsIssuance() bool { return false }
+
+func (si *SpendInput) writePrevoutCommitment(w io.Writer) error {
+	return si.OutputCommitment.writeTo(w)
+}
 
 func NewSpendInput(txhash Hash, index uint32, arguments [][]byte, assetID AssetID, amount uint64, controlProgram, referenceData []byte) *TxInput {
 	return &TxInput{

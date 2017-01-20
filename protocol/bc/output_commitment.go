@@ -3,6 +3,7 @@ package bc
 import (
 	"fmt"
 	"io"
+	"log"
 
 	"chain/encoding/blockchain"
 	"chain/errors"
@@ -16,31 +17,26 @@ type OutputCommitment struct {
 	ControlProgram []byte
 }
 
-func (oc *OutputCommitment) WriteTo(w io.Writer) (int64, error) {
-	n, err := oc.AssetAmount.writeTo(w)
+func (oc *OutputCommitment) writeTo(w io.Writer) error {
+	err := oc.AssetAmount.writeTo(w)
 	if err != nil {
-		return n, errors.Wrap(err, "writing asset amount")
+		return errors.Wrap(err, "writing asset amount")
 	}
 
-	n2, err := blockchain.WriteVarint63(w, oc.VMVersion)
-	n += int64(n2)
+	log.Println("Writing vm version %d", oc.VMVersion)
+	_, err = blockchain.WriteVarint63(w, oc.VMVersion)
 	if err != nil {
-		return n, errors.Wrap(err, "writing vm version")
+		return errors.Wrap(err, "writing vm version")
 	}
-	n2, err = blockchain.WriteVarstr31(w, oc.ControlProgram)
-	n += int64(n2)
+	_, err = blockchain.WriteVarstr31(w, oc.ControlProgram)
 	if err != nil {
-		return n, errors.Wrap(err, "writing control program")
+		return errors.Wrap(err, "writing control program")
 	}
-	return n, nil
+	return nil
 }
 
-func (oc *OutputCommitment) readFrom(r io.Reader, txVersion, assetVersion uint64) (n int, err error) {
-	if assetVersion != 1 {
-		return n, fmt.Errorf("unrecognized asset version %d", assetVersion)
-	}
-	all := txVersion == 1
-	return blockchain.ReadExtensibleString(r, all, func(r io.Reader) error {
+func (oc *OutputCommitment) readFrom(r io.Reader, assetVersion uint64) error {
+	if assetVersion == 1 {
 		_, err := oc.AssetAmount.readFrom(r)
 		if err != nil {
 			return errors.Wrap(err, "reading asset+amount")
@@ -57,5 +53,6 @@ func (oc *OutputCommitment) readFrom(r io.Reader, txVersion, assetVersion uint64
 
 		oc.ControlProgram, _, err = blockchain.ReadVarstr31(r)
 		return errors.Wrap(err, "reading control program")
-	})
+	}
+	return nil
 }

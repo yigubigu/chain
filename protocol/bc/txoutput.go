@@ -37,7 +37,10 @@ func (to *TxOutput) readFrom(r io.Reader, txVersion uint64) (err error) {
 		return errors.Wrap(err, "reading asset version")
 	}
 
-	_, err = to.OutputCommitment.readFrom(r, txVersion, to.AssetVersion)
+	all := txVersion == 1
+	_, err = blockchain.ReadExtensibleString(r, all, func(r io.Reader) error {
+		return to.readOutputCommitment(r)
+	})
 	if err != nil {
 		return errors.Wrap(err, "reading output commitment")
 	}
@@ -61,11 +64,11 @@ func (to *TxOutput) writeTo(w io.Writer, serflags byte) error {
 
 	_, err = blockchain.WriteExtensibleString(w, func(w io.Writer) error {
 		if to.AssetVersion == 1 {
-			_, err := to.OutputCommitment.WriteTo(w)
-			return err
+			return to.WriteOutputCommitment(w)
 		}
 		return nil
 	})
+
 	if err != nil {
 		return errors.Wrap(err, "writing output commitment")
 	}
@@ -81,6 +84,17 @@ func (to *TxOutput) writeTo(w io.Writer, serflags byte) error {
 		return errors.Wrap(err, "writing witness")
 	}
 	return nil
+}
+
+func (to *TxOutput) WriteOutputCommitment(w io.Writer) error {
+	if to.AssetVersion == 1 {
+		return to.OutputCommitment.writeTo(w)
+	}
+	return nil
+}
+
+func (to *TxOutput) readOutputCommitment(r io.Reader) error {
+	return to.OutputCommitment.readFrom(r, to.AssetVersion)
 }
 
 func (to *TxOutput) witnessHash() Hash {

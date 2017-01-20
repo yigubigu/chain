@@ -33,7 +33,7 @@ func (s *SigHasher) Hash(idx uint32) Hash {
 		// inp is a spend
 		var ocBuf bytes.Buffer
 		// TODO(tessr): ensure we're checking the asset version on this input somewhere
-		si.OutputCommitment.WriteTo(&ocBuf)
+		si.OutputCommitment.writeTo(&ocBuf)
 		sha3pool.Sum256(outHash[:], ocBuf.Bytes())
 	} else {
 		// inp is an issuance
