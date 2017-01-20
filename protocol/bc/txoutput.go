@@ -59,7 +59,13 @@ func (to *TxOutput) writeTo(w io.Writer, serflags byte) error {
 		return errors.Wrap(err, "writing asset version")
 	}
 
-	err = to.OutputCommitment.writeTo(w, to.AssetVersion)
+	_, err = blockchain.WriteExtensibleString(w, func(w io.Writer) error {
+		if to.AssetVersion == 1 {
+			_, err := to.OutputCommitment.WriteTo(w)
+			return err
+		}
+		return nil
+	})
 	if err != nil {
 		return errors.Wrap(err, "writing output commitment")
 	}
@@ -79,8 +85,4 @@ func (to *TxOutput) writeTo(w io.Writer, serflags byte) error {
 
 func (to *TxOutput) witnessHash() Hash {
 	return EmptyStringHash
-}
-
-func (to *TxOutput) WriteCommitment(w io.Writer) {
-	to.OutputCommitment.writeTo(w, to.AssetVersion)
 }

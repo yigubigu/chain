@@ -3,6 +3,7 @@ package protocol
 import (
 	"context"
 	"encoding/hex"
+	"log"
 	"reflect"
 	"testing"
 	"time"
@@ -130,6 +131,7 @@ func TestGenerateBlock(t *testing.T) {
 	c, b1 := newTestChain(t, now)
 
 	initialBlockHash := b1.Hash()
+	log.Println("HASH >>>>>>>>", b1.Hash())
 	assetID := bc.ComputeAssetID(nil, initialBlockHash, 1, bc.EmptyStringHash)
 
 	txs := []*bc.Tx{

@@ -224,6 +224,9 @@ func (t *TxInput) writeTo(w io.Writer, serflags uint8) error {
 	return nil
 }
 
+// WriteInputCommitment writes the bare input commitment to w. It's up
+// to the caller to wrap it in an "extensible string" for use in
+// transaction serialization.
 func (t *TxInput) WriteInputCommitment(w io.Writer) error {
 	if t.AssetVersion == 1 {
 		switch inp := t.TypedInput.(type) {
@@ -253,9 +256,13 @@ func (t *TxInput) WriteInputCommitment(w io.Writer) error {
 			if err != nil {
 				return err
 			}
-			err = inp.OutputCommitment.writeTo(w, t.AssetVersion)
+			_, err = blockchain.WriteExtensibleString(w, func(w io.Writer) error {
+				_, err := inp.OutputCommitment.WriteTo(w)
+				return err
+			})
 			return err
 		}
+		return fmt.Errorf("unknown input type %T", t.TypedInput)
 	}
 	return nil
 }
