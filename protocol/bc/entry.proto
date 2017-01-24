@@ -1,0 +1,71 @@
+syntax = "proto3";
+
+package bc;
+
+// Entry field 1 is always the type.
+// Entry field 2 is always the pointers.
+// Entry field 3 is always the content.
+// Entry field 3 is always the witness.
+
+message UnknownEntry {
+	message Content {
+		Hash ext_hash = 1;
+	}
+
+	message Witness {
+		Hash ext_hash = 1;
+	}
+
+	string type = 1;
+	repeated Hash pointers = 2;
+	Content content = 3;
+	Witness witness = 4;
+}
+
+message Header {
+	message Content {
+		int version = 1;
+		repeated Pointer results = 2;
+		repeated Pointer references = 3;
+		Pointer timerange = 4;
+		Hash ext_hash = 5;
+	}
+
+	message Witness {
+		int mintime = 1;
+		int maxtime = 2;
+		Hash ext_hash = 3;
+	}
+
+	string type = 1;
+	repeated Hash pointers = 2;
+	Content content = 3;
+	Witness witness = 4;
+}
+
+message ReferenceData {
+	string type = 1;
+	bytes content = 3;
+	reserved 2, 4;
+}
+
+message Output {
+	message Content {
+		Pointer source = 1;
+		int position = 2;
+		Pointer reference_data = 3;
+		Hash asset_id = 4;
+		int amount = 5;
+		Pointer control_predicate = 6;
+		Hash ext_hash = 7;
+	}
+
+	message Witness {
+		Hash ext_hash = 1;
+	}
+
+	string type = 1;
+	repeated Hash pointers = 2;
+	Content content = 3;
+	Witness witness = 4;
+}
