@@ -201,6 +201,8 @@ const (
 	OP_TXSIGHASH     Op = 0xae
 	OP_BLOCKSIGHASH  Op = 0xaf
 
+	OP_THRESHOLD Op = 0xb0
+
 	OP_CHECKOUTPUT   Op = 0xc1
 	OP_ASSET         Op = 0xc2
 	OP_AMOUNT        Op = 0xc3
@@ -311,6 +313,8 @@ var (
 		OP_CHECKMULTISIG: {OP_CHECKMULTISIG, "CHECKMULTISIG", opCheckMultiSig},
 		OP_TXSIGHASH:     {OP_TXSIGHASH, "TXSIGHASH", opTxSigHash},
 		OP_BLOCKSIGHASH:  {OP_BLOCKSIGHASH, "BLOCKSIGHASH", opBlockSigHash},
+
+		OP_THRESHOLD: {OP_THRESHOLD, "THRESHOLD", opThreshold},
 
 		OP_CHECKOUTPUT:   {OP_CHECKOUTPUT, "CHECKOUTPUT", opCheckOutput},
 		OP_ASSET:         {OP_ASSET, "ASSET", opAsset},

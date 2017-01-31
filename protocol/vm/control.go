@@ -106,3 +106,66 @@ func opJumpIf(vm *virtualMachine) error {
 	}
 	return nil
 }
+
+func opThreshold(vm *virtualMachine) error {
+	// xxx entry cost
+	// xxx deferred exit cost/refund
+	nPredicates, err := vm.popInt64(true)
+	if err != nil {
+		return err
+	}
+	// xxx range-check nPredicates
+	nArgs, err := vm.popInt64(true)
+	if err != nil {
+		return err
+	}
+	// xxx range-check nArgs
+	predicates := make([][]byte, 0, nPredicates)
+	for i := 0; i < nPredicates; i++ {
+		p, err := vm.pop(true)
+		if err != nil {
+			return err
+		}
+		predicates = append(predicates, p)
+	}
+	mask, err := vm.pop(true)
+	if err != nil {
+		return err
+	}
+	// xxx count of 1-bits in mask must == nArgs
+	// xxx index of highest 1-bit in mask must be < nPredicates
+	args := make([][]byte, 0, nArgs)
+	for i := 0; i < nArgs; i++ {
+		a, err := vm.pop(true)
+		if err != nil {
+			return err
+		}
+		args = append(args, a)
+	}
+	for i := 0; i < nPredicates; i++ {
+		byteNum := i / 8
+		bytePos := i % 8
+		if mask[byteNum]&(1<<bytePos) != 0 {
+			arg := args[0]
+			args = args[1:]
+			// xxx childvm setup cost
+			childVM := virtualMachine{
+				mainprog: vm.mainprog,
+				program: predicates[i],
+				runLimit: xxx,
+				depth: vm.depth+1,
+				dataStack: [][]byte{arg},
+				tx: vm.tx,
+				inputIndex: vm.inputIndex,
+				sigHasher: vm.sigHasher,
+			}
+			ok, childErr := childVM.run()
+			// xxx childvm teardown cost/refund
+			if childErr != nil || !ok {
+				// short circuit
+				return vm.pushBool(false, true)
+			}
+		}
+	}
+	return vm.pushBool(true, true)
+}
