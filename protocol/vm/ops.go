@@ -314,8 +314,6 @@ var (
 		OP_TXSIGHASH:     {OP_TXSIGHASH, "TXSIGHASH", opTxSigHash},
 		OP_BLOCKSIGHASH:  {OP_BLOCKSIGHASH, "BLOCKSIGHASH", opBlockSigHash},
 
-		OP_THRESHOLD: {OP_THRESHOLD, "THRESHOLD", opThreshold},
-
 		OP_CHECKOUTPUT:   {OP_CHECKOUTPUT, "CHECKOUTPUT", opCheckOutput},
 		OP_ASSET:         {OP_ASSET, "ASSET", opAsset},
 		OP_AMOUNT:        {OP_AMOUNT, "AMOUNT", opAmount},
@@ -469,6 +467,7 @@ func init() {
 
 	// This is here to break a dependency cycle
 	ops[OP_CHECKPREDICATE] = opInfo{OP_CHECKPREDICATE, "CHECKPREDICATE", opCheckPredicate}
+	ops[OP_THRESHOLD] = opInfo{OP_THRESHOLD, "THRESHOLD", opThreshold}
 
 	opsByName = make(map[string]opInfo)
 	for _, info := range ops {

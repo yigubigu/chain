@@ -121,7 +121,7 @@ func opThreshold(vm *virtualMachine) error {
 	}
 	// xxx range-check nArgs
 	predicates := make([][]byte, 0, nPredicates)
-	for i := 0; i < nPredicates; i++ {
+	for i := int64(0); i < nPredicates; i++ {
 		p, err := vm.pop(true)
 		if err != nil {
 			return err
@@ -135,33 +135,33 @@ func opThreshold(vm *virtualMachine) error {
 	// xxx count of 1-bits in mask must == nArgs
 	// xxx index of highest 1-bit in mask must be < nPredicates
 	args := make([][]byte, 0, nArgs)
-	for i := 0; i < nArgs; i++ {
+	for i := int64(0); i < nArgs; i++ {
 		a, err := vm.pop(true)
 		if err != nil {
 			return err
 		}
 		args = append(args, a)
 	}
-	for i := 0; i < nPredicates; i++ {
+	for i := int64(0); i < nPredicates; i++ {
 		byteNum := i / 8
-		bytePos := i % 8
+		bytePos := uint(i % 8)
 		if mask[byteNum]&(1<<bytePos) != 0 {
 			arg := args[0]
 			args = args[1:]
 			// xxx childvm setup cost
 			childVM := virtualMachine{
 				mainprog: vm.mainprog,
-				program: predicates[i],
-				runLimit: xxx,
-				depth: vm.depth+1,
-				dataStack: [][]byte{arg},
-				tx: vm.tx,
+				program:  predicates[i],
+				// xxx runLimit
+				depth:      vm.depth + 1,
+				dataStack:  [][]byte{arg},
+				tx:         vm.tx,
 				inputIndex: vm.inputIndex,
-				sigHasher: vm.sigHasher,
+				sigHasher:  vm.sigHasher,
 			}
-			ok, childErr := childVM.run()
+			childErr := childVM.run()
 			// xxx childvm teardown cost/refund
-			if childErr != nil || !ok {
+			if childErr != nil || childVM.falseResult() {
 				// short circuit
 				return vm.pushBool(false, true)
 			}
