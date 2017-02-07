@@ -6,6 +6,7 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 
+	"chain/protocol/bc"
 	"chain/testutil"
 )
 
@@ -31,33 +32,33 @@ func TestMapTx(t *testing.T) {
 	if header.body.MaxTimeMS != oldTx.MaxTime {
 		t.Errorf("header.body.MaxTimeMS is %d, expected %d", header.body.MaxTimeMS, oldTx.MaxTime)
 	}
-	if len(header.body.Results) != len(oldOuts) {
-		t.Errorf("header.body.Results contains %d item(s), expected %d", len(header.body.Results), len(oldOuts))
+	if len(header.body.ResultRefs) != len(oldOuts) {
+		t.Errorf("header.body.ResultRefs contains %d item(s), expected %d", len(header.body.ResultRefs), len(oldOuts))
 	}
 
 	for i, oldOut := range oldOuts {
-		if resultEntry, ok := entryMap[header.body.Results[i]]; ok {
-			if newOut, ok := resultEntry.(*output); ok {
+		if resultEntry, ok := entryMap[header.body.ResultRefs[i]]; ok {
+			if newOut, ok := resultEntry.(*Output); ok {
 				if newOut.body.Source.Value != oldOut.AssetAmount {
-					t.Errorf("header.body.Results[%d].(*output).body.Source is %v, expected %v", i, newOut.body.Source.Value, oldOut.AssetAmount)
+					t.Errorf("header.body.ResultRefs[%d].(*output).body.Source is %v, expected %v", i, newOut.body.Source.Value, oldOut.AssetAmount)
 				}
 				if newOut.body.ControlProgram.VMVersion != 1 {
-					t.Errorf("header.body.Results[%d].(*output).body.ControlProgram.VMVersion is %d, expected 1", i, newOut.body.ControlProgram.VMVersion)
+					t.Errorf("header.body.ResultRefs[%d].(*output).body.ControlProgram.VMVersion is %d, expected 1", i, newOut.body.ControlProgram.VMVersion)
 				}
 				if !bytes.Equal(newOut.body.ControlProgram.Code, oldOut.ControlProgram) {
-					t.Errorf("header.body.Results[%d].(*output).body.ControlProgram.Code is %x, expected %x", i, newOut.body.ControlProgram.Code, oldOut.ControlProgram)
+					t.Errorf("header.body.ResultRefs[%d].(*output).body.ControlProgram.Code is %x, expected %x", i, newOut.body.ControlProgram.Code, oldOut.ControlProgram)
 				}
-				if (newOut.body.Data != entryRef{}) {
-					t.Errorf("header.body.Results[%d].(*output).body.Reference is %x, expected zero", i, newOut.body.Data[:])
+				if (newOut.body.DataRef != bc.Hash{}) {
+					t.Errorf("header.body.ResultRefs[%d].(*output).body.DataRef is %x, expected zero", i, newOut.body.DataRef[:])
 				}
 				if (newOut.body.ExtHash != extHash{}) {
-					t.Errorf("header.body.Results[%d].(*output).body.ExtHash is %x, expected zero", i, newOut.body.ExtHash[:])
+					t.Errorf("header.body.ResultRefs[%d].(*output).body.ExtHash is %x, expected zero", i, newOut.body.ExtHash[:])
 				}
 			} else {
-				t.Errorf("header.body.Results[%d] has type %s, expected output1", i, resultEntry.Type())
+				t.Errorf("header.body.ResultRefs[%d] has type %s, expected output1", i, resultEntry.Type())
 			}
 		} else {
-			t.Errorf("entryMap contains nothing for header.body.Results[%d] (%x)", i, header.body.Results[i][:])
+			t.Errorf("entryMap contains nothing for header.body.ResultRefs[%d] (%x)", i, header.body.ResultRefs[i][:])
 		}
 	}
 }

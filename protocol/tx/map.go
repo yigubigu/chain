@@ -9,12 +9,12 @@ import (
 	"chain/protocol/vmutil"
 )
 
-func mapTx(tx *bc.TxData) (headerID entryRef, hdr *header, entryMap map[entryRef]entry, err error) {
-	var refdataID entryRef
+func mapTx(tx *bc.TxData) (headerID bc.Hash, hdr *Header, entryMap map[bc.Hash]Entry, err error) {
+	var dataRef bc.Hash
 
-	entryMap = make(map[entryRef]entry)
+	entryMap = make(map[bc.Hash]Entry)
 
-	addEntry := func(e entry) (id entryRef, entry entry, err error) {
+	addEntry := func(e Entry) (id bc.Hash, entry Entry, err error) {
 		id, err = entryID(e)
 		if err != nil {
 			err = errors.Wrapf(err, "computing entryID for %s entry", e.Type())
@@ -25,7 +25,7 @@ func mapTx(tx *bc.TxData) (headerID entryRef, hdr *header, entryMap map[entryRef
 	}
 
 	if len(tx.ReferenceData) > 0 {
-		refdataID, _, err = addEntry(newData(hashData(tx.ReferenceData)))
+		dataRef, _, err = addEntry(newData(hashData(tx.ReferenceData)))
 		if err != nil {
 			err = errors.Wrap(err, "adding refdata entry")
 			return
@@ -36,20 +36,20 @@ func mapTx(tx *bc.TxData) (headerID entryRef, hdr *header, entryMap map[entryRef
 	// issuances.  Do spends first so the entry ID of the first spend is
 	// available in case an issuance needs it for its anchor.
 
-	var firstSpendID *entryRef
+	var firstSpendID *bc.Hash
 	muxSources := make([]valueSource, len(tx.Inputs))
 
 	for i, inp := range tx.Inputs {
 		if oldSp, ok := inp.TypedInput.(*bc.SpendInput); ok {
-			var inpRefdataID entryRef
+			var inpDataRef bc.Hash
 			if len(inp.ReferenceData) != 0 {
-				inpRefdataID, _, err = addEntry(newData(hashData(inp.ReferenceData)))
+				inpDataRef, _, err = addEntry(newData(hashData(inp.ReferenceData)))
 				if err != nil {
 					return
 				}
 			}
-			var spID entryRef
-			spID, _, err = addEntry(newSpend(entryRef(oldSp.SpentOutputID.Hash), inpRefdataID, i))
+			var spID bc.Hash
+			spID, _, err = addEntry(newSpend(oldSp.SpentOutputID, inpDataRef, i))
 			if err != nil {
 				err = errors.Wrapf(err, "adding spend entry for input %d", i)
 				return
@@ -66,9 +66,9 @@ func mapTx(tx *bc.TxData) (headerID entryRef, hdr *header, entryMap map[entryRef
 
 	for i, inp := range tx.Inputs {
 		if oldIss, ok := inp.TypedInput.(*bc.IssuanceInput); ok {
-			var inpRefdataID entryRef
+			var inpDataRef bc.Hash
 			if len(inp.ReferenceData) != 0 {
-				inpRefdataID, _, err = addEntry(newData(hashData(inp.ReferenceData)))
+				inpDataRef, _, err = addEntry(newData(hashData(inp.ReferenceData)))
 				if err != nil {
 					err = errors.Wrapf(err, "adding input refdata entry for input %d", i)
 					return
@@ -79,16 +79,16 @@ func mapTx(tx *bc.TxData) (headerID entryRef, hdr *header, entryMap map[entryRef
 			// programs are omitted here because they do not contribute to
 			// the body hash of an issuance.
 
-			var nonceHash entryRef
+			var nonceRef bc.Hash
 
 			if len(oldIss.Nonce) == 0 {
 				if firstSpendID == nil {
 					err = fmt.Errorf("nonce-less issuance in transaction with no spends")
 					return
 				}
-				nonceHash = *firstSpendID
+				nonceRef = *firstSpendID
 			} else {
-				var trID entryRef
+				var trID bc.Hash
 				trID, _, err = addEntry(newTimeRange(tx.MinTime, tx.MaxTime))
 				if err != nil {
 					err = errors.Wrapf(err, "adding timerange entry for input %d", i)
@@ -99,7 +99,7 @@ func mapTx(tx *bc.TxData) (headerID entryRef, hdr *header, entryMap map[entryRef
 				b := vmutil.NewBuilder()
 				b = b.AddData(oldIss.Nonce).AddOp(vm.OP_DROP).AddOp(vm.OP_ASSET).AddData(assetID[:]).AddOp(vm.OP_EQUAL)
 
-				nonceHash, _, err = addEntry(newNonce(program{1, b.Program}, trID))
+				nonceRef, _, err = addEntry(newNonce(bc.Program{1, b.Program}, trID))
 				if err != nil {
 					err = errors.Wrapf(err, "adding nonce entry for input %d", i)
 					return
@@ -108,8 +108,8 @@ func mapTx(tx *bc.TxData) (headerID entryRef, hdr *header, entryMap map[entryRef
 
 			val := inp.AssetAmount()
 
-			var issID entryRef
-			issID, _, err = addEntry(newIssuance(nonceHash, val, inpRefdataID, i))
+			var issID bc.Hash
+			issID, _, err = addEntry(newIssuance(nonceRef, val, inpDataRef, i))
 			if err != nil {
 				err = errors.Wrapf(err, "adding issuance entry for input %d", i)
 				return
@@ -128,7 +128,7 @@ func mapTx(tx *bc.TxData) (headerID entryRef, hdr *header, entryMap map[entryRef
 		return
 	}
 
-	var results []entryRef
+	var resultRefs []bc.Hash
 
 	for i, out := range tx.Outputs {
 		s := valueSource{
@@ -137,44 +137,44 @@ func mapTx(tx *bc.TxData) (headerID entryRef, hdr *header, entryMap map[entryRef
 			Value:    out.AssetAmount,
 		}
 
-		var outRefdataID entryRef
+		var outDataRef bc.Hash
 		if len(out.ReferenceData) > 0 {
-			outRefdataID, _, err = addEntry(newData(hashData(out.ReferenceData)))
+			outDataRef, _, err = addEntry(newData(hashData(out.ReferenceData)))
 			if err != nil {
 				err = errors.Wrapf(err, "adding refdata entry for output %d", i)
 				return
 			}
 		}
 
-		var resultID entryRef
+		var resultID bc.Hash
 		if vmutil.IsUnspendable(out.ControlProgram) {
 			// retirement
-			resultID, _, err = addEntry(newRetirement(s, outRefdataID, i))
+			resultID, _, err = addEntry(newRetirement(s, outDataRef, i))
 			if err != nil {
 				err = errors.Wrapf(err, "adding retirement entry for output %d", i)
 				return
 			}
 		} else {
 			// non-retirement
-			prog := program{out.VMVersion, out.ControlProgram}
-			resultID, _, err = addEntry(newOutput(s, prog, outRefdataID, i))
+			prog := bc.Program{out.VMVersion, out.ControlProgram}
+			resultID, _, err = addEntry(newOutput(s, prog, outDataRef, i))
 			if err != nil {
 				err = errors.Wrapf(err, "adding output entry for output %d", i)
 				return
 			}
 		}
 
-		results = append(results, resultID)
+		resultRefs = append(resultRefs, resultID)
 	}
 
-	var h entry
-	headerID, h, err = addEntry(newHeader(tx.Version, results, refdataID, tx.MinTime, tx.MaxTime))
+	var h Entry
+	headerID, h, err = addEntry(newHeader(tx.Version, resultRefs, dataRef, tx.MinTime, tx.MaxTime))
 	if err != nil {
 		err = errors.Wrap(err, "adding header entry")
 		return
 	}
 
-	return headerID, h.(*header), entryMap, nil
+	return headerID, h.(*Header), entryMap, nil
 }
 
 func mapBlockHeader(old *bc.BlockHeader) (bhID entryRef, bh *blockHeader, err error) {

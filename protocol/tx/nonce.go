@@ -1,21 +1,23 @@
 package tx
 
-type nonce struct {
+import "chain/protocol/bc"
+
+type Nonce struct {
 	body struct {
-		Program   program
-		TimeRange entryRef
-		ExtHash   extHash
+		Program      bc.Program
+		TimeRangeRef bc.Hash
+		ExtHash      extHash
 	}
 }
 
-func (nonce) Type() string         { return "nonce1" }
-func (n *nonce) Body() interface{} { return n.body }
+func (Nonce) Type() string         { return "nonce1" }
+func (n *Nonce) Body() interface{} { return n.body }
 
-func (nonce) Ordinal() int { return -1 }
+func (Nonce) Ordinal() int { return -1 }
 
-func newNonce(p program, tr entryRef) *nonce {
-	n := new(nonce)
+func newNonce(p bc.Program, trRef bc.Hash) *Nonce {
+	n := new(Nonce)
 	n.body.Program = p
-	n.body.TimeRange = tr
+	n.body.TimeRangeRef = trRef
 	return n
 }

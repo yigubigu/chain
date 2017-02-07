@@ -504,7 +504,7 @@ func TestIntrospectionOps(t *testing.T) {
 				runLimit: 0,
 				tx:       tx,
 				txContext: bc.VMContext{
-					OutputID: &bc.Hash{},
+					OutputID: &bc.OutputID{},
 				},
 			},
 			wantErr: ErrRunLimitExceeded,

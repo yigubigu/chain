@@ -1,23 +1,25 @@
 package tx
 
-type retirement struct {
+import "chain/protocol/bc"
+
+type Retirement struct {
 	body struct {
 		Source  valueSource
-		Data    entryRef
+		DataRef bc.Hash
 		ExtHash extHash
 	}
 	ordinal int
 }
 
-func (retirement) Type() string         { return "retirement1" }
-func (r *retirement) Body() interface{} { return r.body }
+func (Retirement) Type() string         { return "retirement1" }
+func (r *Retirement) Body() interface{} { return r.body }
 
-func (r retirement) Ordinal() int { return r.ordinal }
+func (r Retirement) Ordinal() int { return r.ordinal }
 
-func newRetirement(source valueSource, data entryRef, ordinal int) *retirement {
-	r := new(retirement)
+func newRetirement(source valueSource, dataRef bc.Hash, ordinal int) *Retirement {
+	r := new(Retirement)
 	r.body.Source = source
-	r.body.Data = data
+	r.body.DataRef = dataRef
 	r.ordinal = ordinal
 	return r
 }

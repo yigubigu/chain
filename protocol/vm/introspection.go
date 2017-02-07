@@ -208,7 +208,7 @@ func opOutputID(vm *virtualMachine) error {
 		return err
 	}
 
-	return vm.push(outid[:], true)
+	return vm.push(outid.Hash[:], true)
 }
 
 func opNonce(vm *virtualMachine) error {
