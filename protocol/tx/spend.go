@@ -4,22 +4,43 @@ import "chain/protocol/bc"
 
 type Spend struct {
 	body struct {
-		SpentOutput bc.OutputID
-		DataRef     bc.Hash
+		SpentOutput EntryRef
+		Data        EntryRef
 		ExtHash     extHash
 	}
-	ordinal int
+	witness struct {
+		Destination valueDestination
+		Arguments   [][]byte
+		ExtHash     extHash
+	}
 }
 
 func (Spend) Type() string         { return "spend1" }
 func (s *Spend) Body() interface{} { return s.body }
 
-func (s Spend) Ordinal() int { return s.ordinal }
+func (s *Spend) SpentOutput() EntryRef {
+	return s.body.SpentOutput
+}
 
-func newSpend(spentOutput bc.OutputID, dataRef bc.Hash, ordinal int) *Spend {
+func (s *Spend) RefDataHash() (bc.Hash, error) {
+	dEntry := s.body.Data.Entry
+	if dEntry == nil {
+		// xxx error
+	}
+	d, ok := dEntry.(*data)
+	if !ok {
+		// xxx error
+	}
+	return d.body, nil
+}
+
+func (s *Spend) Arguments() [][]byte {
+	return s.witness.Arguments
+}
+
+func newSpend(spentOutput, data EntryRef) *Spend {
 	s := new(Spend)
 	s.body.SpentOutput = spentOutput
-	s.body.DataRef = dataRef
-	s.ordinal = ordinal
+	s.body.Data = data
 	return s
 }

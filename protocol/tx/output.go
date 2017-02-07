@@ -6,22 +6,37 @@ type Output struct {
 	body struct {
 		Source         valueSource
 		ControlProgram bc.Program
-		DataRef        bc.Hash
+		Data           EntryRef
 		ExtHash        extHash
 	}
-	ordinal int
 }
 
 func (Output) Type() string         { return "output1" }
 func (o *Output) Body() interface{} { return o.body }
 
-func (o Output) Ordinal() int { return o.ordinal }
+func (o *Output) AssetID() bc.AssetID {
+	return o.body.Source.Value.AssetID
+}
 
-func newOutput(source valueSource, controlProgram bc.Program, dataRef bc.Hash, ordinal int) *Output {
+func (o *Output) Amount() uint64 {
+	return o.body.Source.Value.Amount
+}
+
+func (o *Output) ControlProgram() bc.Program {
+	return o.body.ControlProgram
+}
+
+func (o *Output) RefDataHash() bc.Hash {
+	if o.body.Data.Entry == nil {
+		return bc.EmptyStringHash
+	}
+	return o.body.Data.Entry.(*data).body
+}
+
+func newOutput(source valueSource, controlProgram bc.Program, data EntryRef) *Output {
 	out := new(Output)
 	out.body.Source = source
 	out.body.ControlProgram = controlProgram
-	out.body.DataRef = dataRef
-	out.ordinal = ordinal
+	out.body.Data = data
 	return out
 }

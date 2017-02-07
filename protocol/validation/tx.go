@@ -1,13 +1,15 @@
 package validation
 
 import (
-	"bytes"
 	"math"
+
+	"golang.org/x/sync/errgroup"
 
 	"chain/errors"
 	"chain/math/checked"
 	"chain/protocol/bc"
 	"chain/protocol/state"
+	"chain/protocol/tx"
 	"chain/protocol/vm"
 	"chain/protocol/vmutil"
 )
@@ -120,30 +122,35 @@ func ConfirmTx(snapshot *state.Snapshot, initialBlockHash bc.Hash, block *bc.Blo
 //
 // Result is nil for well-formed transactions, ErrBadTx with
 // supporting detail otherwise.
-func CheckTxWellFormed(tx *bc.Tx) error {
-	if len(tx.Inputs) == 0 {
-		return badTxErr(errNoInputs)
+func CheckTxWellFormed(hdrRef tx.EntryRef) error {
+	hdr := hdrRef.Entry.(*tx.Header)
+	spends, issuances, err := hdr.Inputs()
+	if err != nil {
+		return err
 	}
 
-	if len(tx.Inputs) > math.MaxInt32 {
+	nInputs := len(spends) + len(issuances)
+	if nInputs == 0 {
+		return badTxErr(errNoInputs)
+	}
+	if nInputs > math.MaxInt32 {
 		return badTxErr(errTooManyInputs)
 	}
 
 	// Are all inputs issuances, all with asset version 1, and all with empty nonces?
 	allIssuancesWithEmptyNonces := true
-	for _, txin := range tx.Inputs {
-		if txin.AssetVersion != 1 {
-			allIssuancesWithEmptyNonces = false
-			break
-		}
-		ii, ok := txin.TypedInput.(*bc.IssuanceInput)
-		if !ok {
-			allIssuancesWithEmptyNonces = false
-			break
-		}
-		if len(ii.Nonce) > 0 {
-			allIssuancesWithEmptyNonces = false
-			break
+	if len(spends) > 0 {
+		allIssuancesWithEmptyNonces = false
+	} else {
+		for _, issRef := range issuances {
+			iss, ok := issRef.Entry.(*tx.Issuance)
+			if !ok {
+				// xxx (impossible?) error
+			}
+			if !iss.Anchor().IsNil() { // xxx is this the right test?
+				allIssuancesWithEmptyNonces = false
+				break
+			}
 		}
 	}
 	if allIssuancesWithEmptyNonces {
@@ -152,91 +159,97 @@ func CheckTxWellFormed(tx *bc.Tx) error {
 
 	// Check that the transaction maximum time is greater than or equal to the
 	// minimum time, if it is greater than 0.
-	if tx.MaxTime > 0 && tx.MaxTime < tx.MinTime {
+	if hdr.MaxTimeMS() > 0 && hdr.MaxTimeMS() < hdr.MinTimeMS() {
 		return badTxErr(errMisorderedTime)
 	}
+
+	txVersion := hdr.Version()
 
 	// Check that each input commitment appears only once. Also check that sums
 	// of inputs and outputs balance, and check that both input and output sums
 	// are less than 2^63 so that they don't overflow their int64 representation.
 	parity := make(map[bc.AssetID]int64)
-	commitments := make(map[string]int)
 
-	for i, txin := range tx.Inputs {
-		if tx.Version == 1 && txin.AssetVersion != 1 {
-			return badTxErrf(errAssetVersion, "unknown asset version %d in input %d for transaction version %d", txin.AssetVersion, i, tx.Version)
-		}
-
-		assetID := txin.AssetID()
-
-		if txin.Amount() > math.MaxInt64 {
+	for _, spRef := range spends {
+		sp := spRef.Entry.(*tx.Spend)
+		outRef := sp.SpentOutput()
+		out := outRef.Entry.(*tx.Output)
+		amount := out.Amount()
+		if amount > math.MaxInt64 {
 			return badTxErr(errInputTooBig)
 		}
-
-		sum, ok := checked.AddInt64(parity[assetID], int64(txin.Amount()))
+		assetID := out.AssetID()
+		sum, ok := checked.AddInt64(parity[assetID], int64(amount))
 		if !ok {
-			return badTxErrf(errInputSumTooBig, "adding input %d overflows the allowed asset amount", i)
+			id, _ := spRef.Hash()
+			return badTxErrf(errInputSumTooBig, "adding input %x overflows the allowed asset amount", id[:])
 		}
 		parity[assetID] = sum
-
-		switch x := txin.TypedInput.(type) {
-		case *bc.IssuanceInput:
-			if tx.Version == 1 && x.VMVersion != 1 {
-				return badTxErrf(errVMVersion, "unknown vm version %d in input %d for transaction version %d", x.VMVersion, i, tx.Version)
-			}
-			if txin.AssetVersion != 1 {
-				continue
-			}
-			if len(x.Nonce) == 0 {
-				continue
-			}
-			if tx.MinTime == 0 || tx.MaxTime == 0 {
-				return badTxErr(errTimelessIssuance)
-			}
-		case *bc.SpendInput:
-			if tx.Version == 1 && x.VMVersion != 1 {
-				return badTxErrf(errVMVersion, "unknown vm version %d in input %d for transaction version %d", x.VMVersion, i, tx.Version)
+		if txVersion == 1 {
+			prog := out.ControlProgram()
+			if prog.VMVersion != 1 {
+				id, _ := spRef.Hash()
+				outID, _ := outRef.Hash()
+				return badTxErrf(errVMVersion, "unknown vm version %d in input %x (spending output %x) for transaction version %d", prog.VMVersion, id[:], outID[:], txVersion)
 			}
 		}
-
-		buf := new(bytes.Buffer)
-		txin.WriteInputCommitment(buf, bc.SerTxHash)
-		if inp, ok := commitments[string(buf.Bytes())]; ok {
-			return badTxErrf(errDuplicateInput, "input %d is a duplicate of %d", i, inp)
-		}
-		commitments[string(buf.Bytes())] = i
 	}
 
-	if len(tx.Outputs) > math.MaxInt32 {
+	for _, issRef := range issuances {
+		iss := issRef.Entry.(*tx.Issuance)
+		amount := iss.Amount()
+		if amount > math.MaxInt64 {
+			return badTxErr(errInputTooBig)
+		}
+		assetID := iss.AssetID()
+		sum, ok := checked.AddInt64(parity[assetID], int64(amount))
+		if !ok {
+			id, _ := issRef.Hash()
+			return badTxErrf(errInputSumTooBig, "adding input %x overflows the allowed asset amount", id[:])
+		}
+		parity[assetID] = sum
+		if txVersion == 1 {
+			prog := iss.IssuanceProgram()
+			if prog.VMVersion != 1 {
+				id, _ := issRef.Hash()
+				return badTxErrf(errVMVersion, "unknown vm version %d in input %x for transaction version %d", prog.VMVersion, id[:], txVersion)
+			}
+		}
+		nonceRef := iss.Anchor()
+		_, ok = nonceRef.Entry.(*tx.Nonce)
+		if !ok {
+			// xxx
+		}
+	}
+
+	outRefs := hdr.Results()
+	if len(outRefs) > math.MaxInt32 {
 		return badTxErr(errTooManyOutputs)
 	}
 
-	// Check that every output has a valid value.
-	for i, txout := range tx.Outputs {
-		if tx.Version == 1 {
-			if txout.AssetVersion != 1 {
-				return badTxErrf(errAssetVersion, "unknown asset version %d in output %d for transaction version %d", txout.AssetVersion, i, tx.Version)
-			}
-			if txout.VMVersion != 1 {
-				return badTxErrf(errVMVersion, "unknown vm version %d in output %d for transaction version %d", txout.VMVersion, i, tx.Version)
+	for _, outRef := range outRefs {
+		out := outRef.Entry.(*tx.Output)
+		if txVersion == 1 {
+			prog := out.ControlProgram()
+			if prog.VMVersion != 1 {
+				id, _ := outRef.Hash()
+				return badTxErrf(errVMVersion, "unknown vm version %d in output %x for transaction version %d", prog.VMVersion, id[:], txVersion)
 			}
 		}
-
-		// Transactions cannot have zero-value outputs.
-		// If all inputs have zero value, tx therefore must have no outputs.
-		if txout.Amount == 0 {
+		amount := out.Amount()
+		if amount == 0 {
 			return badTxErr(errEmptyOutput)
 		}
-
-		if txout.Amount > math.MaxInt64 {
+		if amount > math.MaxInt64 {
 			return badTxErr(errOutputTooBig)
 		}
-
-		sum, ok := checked.SubInt64(parity[txout.AssetID], int64(txout.Amount))
+		assetID := out.AssetID()
+		sum, ok := checked.SubInt64(parity[assetID], int64(amount))
 		if !ok {
-			return badTxErrf(errOutputSumTooBig, "adding output %d overflows the allowed asset amount", i)
+			id, _ := outRef.Hash()
+			return badTxErrf(errOutputSumTooBig, "adding output %x (%d units of asset %x) overflows the allowed asset amount", id[:], amount, assetID[:])
 		}
-		parity[txout.AssetID] = sum
+		parity[assetID] = sum
 	}
 
 	for assetID, val := range parity {
@@ -245,14 +258,27 @@ func CheckTxWellFormed(tx *bc.Tx) error {
 		}
 	}
 
-	for i := range tx.Inputs {
-		err := vm.VerifyTxInput(tx, uint32(i))
-		if err != nil {
-			return badTxErrf(err, "validation failed in script execution, input %d", i)
+	// verifyFn returns a closure suitable for use in errgroup.Group.Go
+	verifyFn := func(e tx.EntryRef) func() error {
+		return func() error {
+			err := vm.VerifyTxInput(hdrRef, e)
+			if err != nil {
+				id, _ := e.Hash()
+				return badTxErrf(err, "validation failed in script execution, input %x", id[:])
+			}
+			return nil
 		}
 	}
 
-	return nil
+	var g errgroup.Group
+	for _, spRef := range spends {
+		g.Go(verifyFn(spRef))
+	}
+	for _, issRef := range issuances {
+		g.Go(verifyFn(issRef))
+	}
+
+	return g.Wait()
 }
 
 // ApplyTx updates the state tree with all the changes to the ledger.

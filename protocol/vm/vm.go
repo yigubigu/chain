@@ -9,6 +9,7 @@ import (
 	// TODO(bobg): very little of this package depends on bc, consider trying to remove the dependency
 	"chain/errors"
 	"chain/protocol/bc"
+	"chain/protocol/tx"
 )
 
 const initialRunLimit = 10000
@@ -33,9 +34,8 @@ type virtualMachine struct {
 	dataStack [][]byte
 	altStack  [][]byte
 
-	tx         *bc.Tx
-	txContext  bc.VMContext
-	inputIndex uint32
+	txHeaderRef tx.EntryRef
+	input       tx.EntryRef // input.Entry must be non-nil
 
 	block *bc.Block
 }
@@ -47,38 +47,32 @@ var ErrFalseVMResult = errors.New("false VM result")
 // execution.
 var TraceOut io.Writer
 
-func VerifyTxInput(tx *bc.Tx, inputIndex uint32) (err error) {
+func VerifyTxInput(hdrRef, input tx.EntryRef) (err error) {
 	defer func() {
 		if panErr := recover(); panErr != nil {
 			err = ErrUnexpected
 		}
 	}()
-	return verifyTxInput(tx, inputIndex)
+	return verifyTxInput(hdrRef, input)
 }
 
-func verifyTxInput(tx *bc.Tx, inputIndex uint32) error {
-	if inputIndex < 0 || inputIndex >= uint32(len(tx.Inputs)) {
-		return ErrBadValue
-	}
+func verifyTxInput(hdrRef, input tx.EntryRef) error {
+	hdr := hdrRef.Entry.(*tx.Header)
+	expansionReserved := hdr.Version() == 1
 
-	txinput := tx.Inputs[inputIndex]
-
-	expansionReserved := tx.Version == 1
-
-	f := func(vmversion uint64, prog []byte, args [][]byte) error {
-		if vmversion != 1 {
+	f := func(prog bc.Program, args [][]byte) error {
+		if prog.VMVersion != 1 {
 			return ErrUnsupportedVM
 		}
 
 		vm := virtualMachine{
-			tx:         tx,
-			txContext:  *tx.VMContexts[inputIndex],
-			inputIndex: inputIndex,
+			txHeaderRef: hdrRef,
+			input:       input,
 
 			expansionReserved: expansionReserved,
 
-			mainprog: prog,
-			program:  prog,
+			mainprog: prog.Code,
+			program:  prog.Code,
 			runLimit: initialRunLimit,
 		}
 		for _, arg := range args {
@@ -94,13 +88,23 @@ func verifyTxInput(tx *bc.Tx, inputIndex uint32) error {
 		return wrapErr(err, &vm, args)
 	}
 
-	switch inp := txinput.TypedInput.(type) {
-	case *bc.IssuanceInput:
-		return f(inp.VMVersion, inp.IssuanceProgram, inp.Arguments)
-	case *bc.SpendInput:
-		return f(inp.VMVersion, inp.ControlProgram, inp.Arguments)
+	switch e := input.Entry.(type) {
+	case *tx.Issuance:
+		return f(e.IssuanceProgram(), e.Arguments())
+
+	case *tx.Spend:
+		oEntry := e.SpentOutput().Entry
+		if oEntry == nil {
+			// xxx error
+		}
+		o, ok := oEntry.(*tx.Output)
+		if !ok {
+			// xxx error
+		}
+		return f(o.ControlProgram(), e.Arguments())
 	}
-	return errors.WithDetailf(ErrUnsupportedTx, "transaction input %d has unknown type %T", inputIndex, txinput.TypedInput)
+
+	return errors.WithDetailf(ErrUnsupportedTx, "transaction input has unknown type %T", input.Entry)
 }
 
 func VerifyBlockHeader(prev *bc.BlockHeader, block *bc.Block) (err error) {

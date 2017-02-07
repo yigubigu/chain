@@ -11,16 +11,44 @@ import (
 	"chain/protocol/bc"
 )
 
-type Entry interface {
-	Type() string
-	Body() interface{}
+type (
+	Entry interface {
+		Type() string
+		Body() interface{}
+	}
 
-	// When an entry is created from a bc.TxInput or a bc.TxOutput, this
-	// reports the position of that antecedent object within its
-	// transaction. Both inputs (spends and issuances) and outputs
-	// (including retirements) are numbered beginning at zero. Entries
-	// not originating in this way report -1.
-	Ordinal() int
+	// EntryRef holds one or both of an entry and its id. If the entry
+	// is present and the id is not, the id can be generated (and then
+	// cached) on demand. Both may also be nil to represent a nil entry
+	// pointer.
+	EntryRef struct {
+		Entry
+		ID *bc.Hash
+	}
+
+	hasher interface {
+		Hash() (bc.Hash, error)
+	}
+)
+
+// Hash returns the EntryRef's cached entry ID, computing it first if
+// necessary. Satisfies the hasher interface.
+func (r *EntryRef) Hash() (bc.Hash, error) {
+	if r.ID == nil {
+		if r.Entry == nil {
+			return bc.Hash{}, nil
+		}
+		h, err := entryID(r.Entry)
+		if err != nil {
+			return bc.Hash{}, err
+		}
+		r.ID = &h
+	}
+	return *r.ID, nil
+}
+
+func (r EntryRef) IsNil() bool {
+	return r.Entry == nil && r.ID == nil
 }
 
 type extHash bc.Hash
@@ -53,6 +81,13 @@ func entryID(e Entry) (bc.Hash, error) {
 
 func writeForHash(w io.Writer, c interface{}) error {
 	switch v := c.(type) {
+	case hasher:
+		h, err := v.Hash()
+		if err != nil {
+			return errors.Wrap(err, "computing hash")
+		}
+		_, err = w.Write(h[:])
+		return errors.Wrap(err, "writing hash")
 	case byte:
 		_, err := w.Write([]byte{v})
 		return errors.Wrap(err, "writing byte for hash")
