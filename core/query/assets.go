@@ -52,13 +52,14 @@ func (ind *Indexer) Assets(ctx context.Context, p filter.Predicate, vals []inter
 	for rows.Next() {
 		aa := new(AnnotatedAsset)
 
+		var alias sql.NullString
 		var sortID string
 		var keysJSON []byte
 
 		err := rows.Scan(
 			&aa.ID,
 			&sortID,
-			&aa.Alias,
+			&alias,
 			&aa.IssuanceProgram,
 			&keysJSON,
 			&aa.Quorum,
@@ -73,6 +74,7 @@ func (ind *Indexer) Assets(ctx context.Context, p filter.Predicate, vals []inter
 		if err != nil {
 			return nil, "", errors.Wrap(err, "unmarshaling asset keys json")
 		}
+		aa.Alias = alias.String
 
 		after = sortID
 		assets = append(assets, aa)

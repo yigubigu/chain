@@ -49,12 +49,13 @@ func (ind *Indexer) Accounts(ctx context.Context, p filter.Predicate, vals []int
 
 	accounts := make([]*AnnotatedAccount, 0, limit)
 	for rows.Next() {
+		var alias sql.NullString
 		var keysJSON []byte
 		aa := new(AnnotatedAccount)
 
 		err := rows.Scan(
 			&aa.ID,
-			&aa.Alias,
+			&alias,
 			&keysJSON,
 			&aa.Quorum,
 			&aa.Tags,
@@ -66,6 +67,7 @@ func (ind *Indexer) Accounts(ctx context.Context, p filter.Predicate, vals []int
 		if err != nil {
 			return nil, "", errors.Wrap(err, "unmarshaling account keys json")
 		}
+		aa.Alias = alias.String
 
 		after = aa.ID
 		accounts = append(accounts, aa)
