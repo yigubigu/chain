@@ -2,7 +2,7 @@ import React from 'react'
 import styles from './XpubField.scss'
 import { SelectField, FieldLabel, TextField } from '../'
 import { connect } from 'react-redux'
-import actions from 'MockHsm/actions'
+import actions from 'MockHsm/mockHsmActions'
 
 const methodOptions = {
   mockhsm: 'Use existing MockHSM key',
