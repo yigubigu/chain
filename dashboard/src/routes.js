@@ -9,7 +9,7 @@ import { routes as core } from 'features/core'
 import { routes as transactions } from 'features/transactions'
 import { routes as transactionFeeds } from 'features/transactionFeeds'
 import { routes as unspents } from 'features/unspents'
-import { routes as mockhsm } from 'features/mockhsm'
+import { routes as mockhsm } from 'MockHsm'
 
 const makeRoutes = (store) => ({
   path: '/',

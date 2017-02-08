@@ -1,6 +1,6 @@
 import React from 'react'
 import { BaseList, TableList, EmptyContent } from 'features/shared/components'
-import ListItem from './ListItem'
+import MockHsmListItem from './MockHsmListItem'
 
 const type = 'mockhsm'
 
@@ -12,7 +12,7 @@ const firstTimeContent = <EmptyContent>
 </EmptyContent>
 
 export default BaseList.connect(
-  BaseList.mapStateToProps(type, ListItem, {
+  BaseList.mapStateToProps(type, MockHsmListItem, {
     skipQuery: true,
     label: 'MockHSM keys',
     wrapperComponent: TableList,

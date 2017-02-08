@@ -1,6 +1,6 @@
 import React from 'react'
 
-class ListItem extends React.Component {
+class MockHsmListItem extends React.Component {
   render() {
     const item = this.props.item
 
@@ -14,4 +14,4 @@ class ListItem extends React.Component {
   }
 }
 
-export default ListItem
+export default MockHsmListItem

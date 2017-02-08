@@ -2,7 +2,7 @@ import React from 'react'
 import { BaseNew, FormContainer, FormSection, TextField } from 'features/shared/components'
 import { reduxForm } from 'redux-form'
 
-class New extends React.Component {
+class MockHsmForm extends React.Component {
   constructor(props) {
     super(props)
 
@@ -46,5 +46,5 @@ export default BaseNew.connect(
   reduxForm({
     form: 'newMockHsmKey',
     fields,
-  })(New)
+  })(MockHsmForm)
 )
