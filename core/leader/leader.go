@@ -27,6 +27,20 @@ func IsLeading() bool {
 	return l
 }
 
+// Address retrieves the IP address of the current
+// core leader.
+func Address(ctx context.Context, db pg.DB) (string, error) {
+	const q = `SELECT address FROM leader`
+
+	var addr string
+	err := db.QueryRow(ctx, q).Scan(&addr)
+	if err != nil {
+		return "", errors.Wrap(err, "could not fetch leader address")
+	}
+
+	return addr, nil
+}
+
 // Run runs as a goroutine, trying once every five seconds to become
 // the leader for the core.  If it succeeds, then it calls the
 // function lead (for generating or fetching blocks, and for
@@ -48,110 +62,92 @@ func Run(db *sql.DB, addr string, lead func(context.Context)) {
 		lead:    lead,
 		address: addr,
 	}
+	ticker := time.Tick(5 * time.Second)
 	log.Messagef(ctx, "Using leaderKey: %q", l.key)
 
-	update(ctx, l)
-	for range time.Tick(5 * time.Second) {
-		update(ctx, l)
-	}
-}
-
-type leader struct {
-	// config
-	db      *sql.DB
-	key     string
-	lead    func(context.Context)
-	address string
-
-	// state
-	leading bool
-	cancel  func()
-}
-
-func update(ctx context.Context, l *leader) {
-	const (
-		insertQ = `
-			INSERT INTO leader (leader_key, address, expiry) VALUES ($1, $2, CURRENT_TIMESTAMP + INTERVAL '10 seconds')
-			ON CONFLICT (singleton) DO UPDATE SET leader_key = $1, address = $2, expiry = CURRENT_TIMESTAMP + INTERVAL '10 seconds'
-				WHERE leader.expiry < CURRENT_TIMESTAMP
-		`
-		updateQ = `
-			UPDATE leader SET expiry = CURRENT_TIMESTAMP + INTERVAL '10 seconds'
-				WHERE leader_key = $1
-		`
-	)
-
-	if l.leading {
-		res, err := l.db.Exec(ctx, updateQ, l.key)
-		if err == nil {
-			rowsAffected, err := res.RowsAffected()
-			if err == nil && rowsAffected > 0 {
-				// still leading
-				return
-			}
+	leading := tryForLeadership(ctx, l)
+	for {
+		for !leading {
+			<-ticker
+			leading = tryForLeadership(ctx, l)
 		}
 
-		// Either the UPDATE affected no rows, or it (or RowsAffected)
-		// produced an error.
-
-		if err != nil {
-			log.Error(ctx, err)
-		}
-		log.Messagef(ctx, "No longer core leader")
-		l.cancel()
-		l.leading = false
-
-		lock.Lock()
-		isLeading = false
-		lock.Unlock()
-
-		l.cancel = nil
-	} else {
-		// Try to put this process's key into the leader table.  It
-		// succeeds if the table's empty or the existing row (there can be
-		// only one) is expired.  It fails otherwise.
-		//
-		// On success, this process's leadership expires in 10 seconds
-		// unless it's renewed in the UPDATE query above.
-		// That extends it for another 10 seconds.
-		res, err := l.db.Exec(ctx, insertQ, l.key, l.address)
-		if err != nil {
-			log.Error(ctx, err)
-			return
-		}
-		rowsAffected, err := res.RowsAffected()
-		if err != nil {
-			log.Error(ctx, err)
-			return
-		}
-
-		if rowsAffected == 0 {
-			return
-		}
-
+		// This process was just elected the leader of the Core.
 		log.Messagef(ctx, "I am the core leader")
-
-		l.leading = true
-
 		lock.Lock()
 		isLeading = true
 		lock.Unlock()
 
-		ctx, l.cancel = context.WithCancel(ctx)
+		ctx, cancel := context.WithCancel(ctx)
 		go l.lead(ctx)
+
+		for leading {
+			<-ticker
+			leading = maintainLeadership(ctx, l)
+		}
+
+		// This process was just demoted from leader.
+		log.Messagef(ctx, "No longer core leader")
+		cancel()
+		lock.Lock()
+		isLeading = false
+		lock.Unlock()
 	}
 }
 
-// Address retrieves the IP address of the current
-// core leader.
-func Address(ctx context.Context, db pg.DB) (string, error) {
-	const q = `SELECT address FROM leader`
+type leader struct {
+	db      *sql.DB
+	key     string
+	lead    func(context.Context)
+	address string
+}
 
-	var addr string
-	err := db.QueryRow(ctx, q).Scan(&addr)
+// tryForLeadership attempts make this process the core leader.
+// It returns true if this process is now the leader.
+func tryForLeadership(ctx context.Context, l *leader) bool {
+	const insertQ = `
+		INSERT INTO leader (leader_key, address, expiry) VALUES ($1, $2, CURRENT_TIMESTAMP + INTERVAL '10 seconds')
+		ON CONFLICT (singleton) DO UPDATE SET leader_key = $1, address = $2, expiry = CURRENT_TIMESTAMP + INTERVAL '10 seconds'
+			WHERE leader.expiry < CURRENT_TIMESTAMP
+	`
+
+	// Try to put this process's key into the leader table.  It
+	// succeeds if the table's empty or the existing row (there can be
+	// only one) is expired.  It fails otherwise.
+	//
+	// On success, this process's leadership expires in 10 seconds
+	// unless it's renewed in the UPDATE query below.
+	// That extends it for another 10 seconds.
+	res, err := l.db.Exec(ctx, insertQ, l.key, l.address)
 	if err != nil {
-		return "", errors.Wrap(err, "could not fetch leader address")
+		log.Error(ctx, err)
+		return false
 	}
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		log.Error(ctx, err)
+		return false
+	}
+	return rowsAffected > 0
+}
 
-	return addr, nil
+// maintainLeadership attempts to renew this process's leadership
+// of the core. It returns true if the process is still leader,
+// false otherwise.
+func maintainLeadership(ctx context.Context, l *leader) bool {
+	const updateQ = `
+		UPDATE leader SET expiry = CURRENT_TIMESTAMP + INTERVAL '10 seconds'
+		WHERE leader_key = $1
+	`
+	res, err := l.db.Exec(ctx, updateQ, l.key)
+	if err != nil {
+		log.Error(ctx, err)
+		return false
+	}
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		log.Error(ctx, err)
+		return false
+	}
+	return rowsAffected > 0
 }
