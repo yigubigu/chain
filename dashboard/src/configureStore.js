@@ -3,12 +3,15 @@
 import { createStore, applyMiddleware, compose } from 'redux'
 import thunkMiddleware from 'redux-thunk'
 import { routerMiddleware as createRouterMiddleware } from 'react-router-redux'
+import createSagaMiddleware from 'redux-saga'
 import { history } from 'utility/environment'
 import { exportState, importState } from 'utility/localStorage'
 
 import makeRootReducer from 'reducers'
+import sagas from 'sagas'
 
 const routerMiddleware = createRouterMiddleware(history)
+const sagaMiddleware = createSagaMiddleware()
 
 export default function() {
   const store = createStore(
@@ -17,11 +20,15 @@ export default function() {
     compose(
       applyMiddleware(
         thunkMiddleware,
-        routerMiddleware
+        routerMiddleware,
+        sagaMiddleware
       ),
       window.devToolsExtension ? window.devToolsExtension() : f => f
     )
   )
+
+  // Enable sagas
+  sagaMiddleware.run(sagas)
 
   if (module.hot) {
     // Enable Webpack hot module replacement for reducers

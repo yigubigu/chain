@@ -9,4 +9,6 @@ export default {
     clientApi: () => chainClient().mockHsm.keys
   }),
   ...baseListActions(type, { className: 'MockHsm' }),
+
+  createKey: body => ({ type: 'CREATE_MOCK_HSM_KEY', body })
 }
