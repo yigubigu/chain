@@ -7,20 +7,21 @@ import (
 
 	"chain/errors"
 	"chain/protocol/bc"
+	"chain/protocol/tx"
 	"chain/protocol/validation"
 )
 
 // ValidateTxCached checks a cache of prevalidated transactions
 // before attempting to perform a context-free validation of the tx.
-func (c *Chain) ValidateTxCached(tx *bc.Tx) error {
+func (c *Chain) ValidateTxCached(hdrRef tx.EntryRef) error {
 	// Consult a cache of prevalidated transactions.
-	err, ok := c.prevalidated.lookup(tx.ID)
+	err, ok := c.prevalidated.lookup(hdrRef.Hash())
 	if ok {
 		return err
 	}
 
-	err = validation.CheckTxWellFormed(tx)
-	c.prevalidated.cache(tx.ID, err)
+	err = validation.CheckTxWellFormed(hdrRef)
+	c.prevalidated.cache(hdrRef.Hash(), err)
 	return err
 }
 
