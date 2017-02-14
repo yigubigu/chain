@@ -10,12 +10,12 @@ type (
 	pendingOutput struct {
 		value       bc.AssetAmount
 		controlProg bc.Program
-		data        EntryRef
+		data        *EntryRef
 	}
 
 	pendingRetirement struct {
 		value bc.AssetAmount
-		data  EntryRef
+		data  *EntryRef
 	}
 
 	Builder struct {
@@ -29,7 +29,7 @@ type (
 
 func NewBuilder(version, minTimeMS, maxTimeMS uint64) *Builder {
 	return &Builder{
-		h:       newHeader(version, nil, EntryRef{}, minTimeMS, maxTimeMS),
+		h:       newHeader(version, nil, nil, minTimeMS, maxTimeMS),
 		m:       newMux(nil),
 		entries: make(map[bc.Hash]Entry),
 	}
@@ -43,28 +43,28 @@ func (b *Builder) AddData(h bc.Hash) (*Builder, *data, bc.Hash) {
 	return b, d, dID
 }
 
-func (b *Builder) AddIssuance(nonce EntryRef, value bc.AssetAmount, data EntryRef) (*Builder, EntryRef) {
+func (b *Builder) AddIssuance(nonce *EntryRef, value bc.AssetAmount, data *EntryRef) (*Builder, *EntryRef) {
 	iss := newIssuance(nonce, value, data)
 	issID := mustEntryID(iss)
 	s := valueSource{
-		Ref:   EntryRef{Entry: iss, ID: &issID},
+		Ref:   &EntryRef{Entry: iss, ID: &issID},
 		Value: value,
 	}
 	b.m.body.Sources = append(b.m.body.Sources, s)
 	b.entries[issID] = iss
-	return b, EntryRef{Entry: iss, ID: &issID}
+	return b, &EntryRef{Entry: iss, ID: &issID}
 }
 
-func (b *Builder) AddNonce(p bc.Program, timeRange EntryRef) (*Builder, EntryRef) {
+func (b *Builder) AddNonce(p bc.Program, timeRange *EntryRef) (*Builder, *EntryRef) {
 	n := newNonce(p, timeRange)
 	nID := mustEntryID(n)
 	b.entries[nID] = n
-	return b, EntryRef{Entry: n, ID: &nID}
+	return b, &EntryRef{Entry: n, ID: &nID}
 }
 
 // AddOutput returns only the builder, unlike most other Add
 // functions, since output objects aren't created until Build
-func (b *Builder) AddOutput(value bc.AssetAmount, controlProg bc.Program, data EntryRef) *Builder {
+func (b *Builder) AddOutput(value bc.AssetAmount, controlProg bc.Program, data *EntryRef) *Builder {
 	b.outputs = append(b.outputs, &pendingOutput{
 		value:       value,
 		controlProg: controlProg,
@@ -75,7 +75,7 @@ func (b *Builder) AddOutput(value bc.AssetAmount, controlProg bc.Program, data E
 
 // AddRetirement returns only the builder, unlike most other Add
 // functions, since retirement objects aren't created until Build
-func (b *Builder) AddRetirement(value bc.AssetAmount, data EntryRef) *Builder {
+func (b *Builder) AddRetirement(value bc.AssetAmount, data *EntryRef) *Builder {
 	b.retirements = append(b.retirements, &pendingRetirement{
 		value: value,
 		data:  data,
@@ -83,23 +83,23 @@ func (b *Builder) AddRetirement(value bc.AssetAmount, data EntryRef) *Builder {
 	return b
 }
 
-func (b *Builder) AddSpend(spentOutput EntryRef, value bc.AssetAmount, data EntryRef) (*Builder, EntryRef) {
+func (b *Builder) AddSpend(spentOutput *EntryRef, value bc.AssetAmount, data *EntryRef) (*Builder, *EntryRef) {
 	sp := newSpend(spentOutput, data)
 	spID := mustEntryID(sp)
 	src := valueSource{
-		Ref:   EntryRef{Entry: sp, ID: &spID},
+		Ref:   &EntryRef{Entry: sp, ID: &spID},
 		Value: value,
 	}
 	b.m.body.Sources = append(b.m.body.Sources, src)
 	b.entries[spID] = sp
-	return b, EntryRef{Entry: sp, ID: &spID}
+	return b, &EntryRef{Entry: sp, ID: &spID}
 }
 
-func (b *Builder) AddTimeRange(minTimeMS, maxTimeMS uint64) (*Builder, EntryRef) {
+func (b *Builder) AddTimeRange(minTimeMS, maxTimeMS uint64) (*Builder, *EntryRef) {
 	tr := newTimeRange(minTimeMS, maxTimeMS)
 	trID := mustEntryID(tr)
 	b.entries[trID] = tr
-	return b, EntryRef{Entry: tr, ID: &trID}
+	return b, &EntryRef{Entry: tr, ID: &trID}
 }
 
 func (b *Builder) Build() (bc.Hash, *Header, map[bc.Hash]Entry) {
@@ -108,7 +108,7 @@ func (b *Builder) Build() (bc.Hash, *Header, map[bc.Hash]Entry) {
 	var n uint64
 	for _, po := range b.outputs {
 		s := valueSource{
-			Ref:      EntryRef{Entry: b.m, ID: &muxID},
+			Ref:      &EntryRef{Entry: b.m, ID: &muxID},
 			Value:    po.value,
 			Position: n,
 		}
@@ -116,11 +116,11 @@ func (b *Builder) Build() (bc.Hash, *Header, map[bc.Hash]Entry) {
 		o := newOutput(s, po.controlProg, po.data)
 		oID := mustEntryID(o)
 		b.entries[oID] = o
-		b.h.body.Results = append(b.h.body.Results, EntryRef{Entry: o, ID: &oID})
+		b.h.body.Results = append(b.h.body.Results, &EntryRef{Entry: o, ID: &oID})
 	}
 	for _, pr := range b.retirements {
 		s := valueSource{
-			Ref:      EntryRef{Entry: b.m, ID: &muxID},
+			Ref:      &EntryRef{Entry: b.m, ID: &muxID},
 			Value:    pr.value,
 			Position: n,
 		}
@@ -128,7 +128,7 @@ func (b *Builder) Build() (bc.Hash, *Header, map[bc.Hash]Entry) {
 		r := newRetirement(s, pr.data)
 		rID := mustEntryID(r)
 		b.entries[rID] = r
-		b.h.body.Results = append(b.h.body.Results, EntryRef{Entry: r, ID: &rID})
+		b.h.body.Results = append(b.h.body.Results, &EntryRef{Entry: r, ID: &rID})
 	}
 	hID := mustEntryID(b.h)
 	b.entries[hID] = b.h

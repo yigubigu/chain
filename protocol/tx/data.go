@@ -33,6 +33,16 @@ func NewData(hash bc.Hash) *Data {
 	return d
 }
 
+// refDataHash returns the data hash in e, which must be nil or a data
+// entry pointer. If e is nil (or e.IsNil() is true) the result is the
+// hash of the empty string.
+func refDataHash(e *EntryRef) bc.Hash {
+	if e == nil || e.Entry == nil {
+		return bc.EmptyStringHash
+	}
+	return e.Entry.(*data).body
+}
+
 func HashData(data []byte) (h bc.Hash) {
 	sha3pool.Sum256(h[:], data)
 	return

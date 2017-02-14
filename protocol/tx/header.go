@@ -5,8 +5,8 @@ import "chain/protocol/bc"
 type Header struct {
 	body struct {
 		Version              uint64
-		Results              []EntryRef
-		Data                 EntryRef
+		Results              []*EntryRef
+		Data                 *EntryRef
 		MinTimeMS, MaxTimeMS uint64
 		ExtHash              extHash
 	}
@@ -27,27 +27,24 @@ func (h *Header) MaxTimeMS() uint64 {
 	return h.body.MaxTimeMS
 }
 
-func (h *Header) Results() []EntryRef {
+func (h *Header) Results() []*EntryRef {
 	return h.body.Results
 }
 
 func (h *Header) RefDataHash() bc.Hash {
-	if h.body.Data.Entry == nil {
-		return bc.EmptyStringHash
-	}
-	return h.body.Data.Entry.(*data).body
+	return refDataHash(h.body.Data)
 }
 
 // Inputs returns all input entries (as two lists: spends and
 // issuances) reachable from a header's result entries.
-func (h *Header) Inputs() (spends, issuances []EntryRef, err error) {
-	sMap := make(map[bc.Hash]EntryRef)
-	iMap := make(map[bc.Hash]EntryRef)
+func (h *Header) Inputs() (spends, issuances []*EntryRef, err error) {
+	sMap := make(map[bc.Hash]*EntryRef)
+	iMap := make(map[bc.Hash]*EntryRef)
 
 	// Declare accum before assigning it, so it can reference itself
 	// recursively.
-	var accum func(EntryRef) error
-	accum = func(ref EntryRef) error {
+	var accum func(*EntryRef) error
+	accum = func(ref *EntryRef) error {
 		switch e := ref.Entry.(type) {
 		case *Spend:
 			hash, err := ref.Hash()
@@ -87,7 +84,7 @@ func (h *Header) Inputs() (spends, issuances []EntryRef, err error) {
 	return spends, issuances, nil
 }
 
-func newHeader(version uint64, results []EntryRef, data EntryRef, minTimeMS, maxTimeMS uint64) *Header {
+func newHeader(version uint64, results []*EntryRef, data *EntryRef, minTimeMS, maxTimeMS uint64) *Header {
 	h := new(Header)
 	h.body.Version = version
 	h.body.Results = results

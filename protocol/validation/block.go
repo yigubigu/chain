@@ -33,7 +33,7 @@ var (
 // See $CHAIN/protocol/doc/spec/validation.md#accept-block.
 // It evaluates the prevBlock's consensus program,
 // then calls ValidateBlock.
-func ValidateBlockForAccept(ctx context.Context, snapshot *state.Snapshot, initialBlockHash bc.Hash, prevBlock, block *bc.Block, validateTx func(tx.EntryRef) error) error {
+func ValidateBlockForAccept(ctx context.Context, snapshot *state.Snapshot, initialBlockHash bc.Hash, prevBlock, block *bc.Block, validateTx func(*tx.EntryRef) error) error {
 	if prevBlock != nil {
 		err := vm.VerifyBlockHeader(&prevBlock.BlockHeader, block)
 		if err != nil {
@@ -55,7 +55,7 @@ func ValidateBlockForAccept(ctx context.Context, snapshot *state.Snapshot, initi
 // See $CHAIN/protocol/doc/spec/validation.md#validate-block.
 // Note that it does not execute prevBlock's consensus program.
 // (See ValidateBlockForAccept for that.)
-func ValidateBlock(ctx context.Context, snapshot *state.Snapshot, initialBlockHash bc.Hash, prevBlock, block *bc.Block, validateTx func(tx.EntryRef) error) error {
+func ValidateBlock(ctx context.Context, snapshot *state.Snapshot, initialBlockHash bc.Hash, prevBlock, block *bc.Block, validateTx func(*tx.EntryRef) error) error {
 
 	var g errgroup.Group
 	// Do all of the unparallelizable work, plus validating the block

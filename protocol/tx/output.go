@@ -6,7 +6,7 @@ type Output struct {
 	body struct {
 		Source         valueSource
 		ControlProgram bc.Program
-		Data           EntryRef
+		Data           *EntryRef
 		ExtHash        extHash
 	}
 }
@@ -27,13 +27,10 @@ func (o *Output) ControlProgram() bc.Program {
 }
 
 func (o *Output) RefDataHash() bc.Hash {
-	if o.body.Data.Entry == nil {
-		return bc.EmptyStringHash
-	}
-	return o.body.Data.Entry.(*data).body
+	return refDataHash(o.body.Data)
 }
 
-func newOutput(source valueSource, controlProgram bc.Program, data EntryRef) *Output {
+func newOutput(source valueSource, controlProgram bc.Program, data *EntryRef) *Output {
 	out := new(Output)
 	out.body.Source = source
 	out.body.ControlProgram = controlProgram

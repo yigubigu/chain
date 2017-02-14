@@ -10,7 +10,7 @@ import (
 )
 
 func opCheckOutput(vm *virtualMachine) error {
-	if vm.txHeaderRef.IsNil() {
+	if vm.txHeaderRef == nil {
 		return ErrContext
 	}
 
@@ -91,7 +91,7 @@ func opCheckOutput(vm *virtualMachine) error {
 }
 
 func opAsset(vm *virtualMachine) error {
-	if vm.txHeaderRef.IsNil() {
+	if vm.txHeaderRef == nil {
 		return ErrContext
 	}
 
@@ -125,7 +125,7 @@ func opAsset(vm *virtualMachine) error {
 }
 
 func opAmount(vm *virtualMachine) error {
-	if vm.txHeaderRef.IsNil() {
+	if vm.txHeaderRef == nil {
 		return ErrContext
 	}
 
@@ -159,7 +159,7 @@ func opAmount(vm *virtualMachine) error {
 }
 
 func opProgram(vm *virtualMachine) error {
-	if vm.txHeaderRef.IsNil() {
+	if vm.txHeaderRef == nil {
 		return ErrContext
 	}
 
@@ -172,7 +172,7 @@ func opProgram(vm *virtualMachine) error {
 }
 
 func opMinTime(vm *virtualMachine) error {
-	if vm.txHeaderRef.IsNil() {
+	if vm.txHeaderRef == nil {
 		return ErrContext
 	}
 
@@ -186,7 +186,7 @@ func opMinTime(vm *virtualMachine) error {
 }
 
 func opMaxTime(vm *virtualMachine) error {
-	if vm.txHeaderRef.IsNil() {
+	if vm.txHeaderRef == nil {
 		return ErrContext
 	}
 
@@ -205,7 +205,7 @@ func opMaxTime(vm *virtualMachine) error {
 }
 
 func opRefDataHash(vm *virtualMachine) error {
-	if vm.txHeaderRef.IsNil() {
+	if vm.txHeaderRef == nil {
 		return ErrContext
 	}
 
@@ -218,15 +218,9 @@ func opRefDataHash(vm *virtualMachine) error {
 
 	switch e := vm.input.Entry.(type) {
 	case *tx.Spend:
-		h, err = e.RefDataHash()
-		if err != nil {
-			return err
-		}
+		h = e.RefDataHash()
 	case *tx.Issuance:
-		h, err = e.RefDataHash()
-		if err != nil {
-			return err
-		}
+		h = e.RefDataHash()
 	default:
 		// xxx error
 	}
@@ -235,7 +229,7 @@ func opRefDataHash(vm *virtualMachine) error {
 }
 
 func opTxRefDataHash(vm *virtualMachine) error {
-	if vm.txHeaderRef.IsNil() {
+	if vm.txHeaderRef == nil {
 		return ErrContext
 	}
 
@@ -250,7 +244,7 @@ func opTxRefDataHash(vm *virtualMachine) error {
 }
 
 func opOutputID(vm *virtualMachine) error {
-	if vm.txHeaderRef.IsNil() {
+	if vm.txHeaderRef == nil {
 		return ErrContext
 	}
 
@@ -276,7 +270,7 @@ func opOutputID(vm *virtualMachine) error {
 }
 
 func opNonce(vm *virtualMachine) error {
-	if vm.txHeaderRef.IsNil() {
+	if vm.txHeaderRef == nil {
 		return ErrContext
 	}
 

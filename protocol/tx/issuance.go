@@ -4,15 +4,15 @@ import "chain/protocol/bc"
 
 type Issuance struct {
 	body struct {
-		Anchor  EntryRef
+		Anchor  *EntryRef
 		Value   bc.AssetAmount
-		Data    EntryRef
+		Data    *EntryRef
 		ExtHash extHash
 	}
 	witness struct {
 		Destination     valueDestination
 		InitialBlockID  bc.Hash
-		AssetDefinition EntryRef // data entry
+		AssetDefinition *EntryRef // data entry
 		IssuanceProgram bc.Program
 		Arguments       [][]byte
 		ExtHash         extHash
@@ -30,20 +30,12 @@ func (iss *Issuance) Amount() uint64 {
 	return iss.body.Value.Amount
 }
 
-func (iss *Issuance) Anchor() EntryRef {
+func (iss *Issuance) Anchor() *EntryRef {
 	return iss.body.Anchor
 }
 
-func (iss *Issuance) RefDataHash() (bc.Hash, error) {
-	dEntry := iss.body.Data.Entry
-	if dEntry == nil {
-		// xxx error
-	}
-	d, ok := dEntry.(*data)
-	if !ok {
-		// xxx error
-	}
-	return d.body, nil
+func (iss *Issuance) RefDataHash() bc.Hash {
+	return refDataHash(iss.body.Data)
 }
 
 func (iss *Issuance) IssuanceProgram() bc.Program {
@@ -54,7 +46,7 @@ func (iss *Issuance) Arguments() [][]byte {
 	return iss.witness.Arguments
 }
 
-func newIssuance(anchor EntryRef, value bc.AssetAmount, data EntryRef) *Issuance {
+func newIssuance(anchor *EntryRef, value bc.AssetAmount, data *EntryRef) *Issuance {
 	iss := new(Issuance)
 	iss.body.Anchor = anchor
 	iss.body.Value = value
