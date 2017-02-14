@@ -1,11 +1,9 @@
-package tx
-
-import "chain/protocol/bc"
+package bc
 
 type Output struct {
 	body struct {
 		Source         valueSource
-		ControlProgram bc.Program
+		ControlProgram Program
 		Data           *EntryRef
 		ExtHash        extHash
 	}
@@ -14,7 +12,7 @@ type Output struct {
 func (Output) Type() string         { return "output1" }
 func (o *Output) Body() interface{} { return o.body }
 
-func (o *Output) AssetID() bc.AssetID {
+func (o *Output) AssetID() AssetID {
 	return o.body.Source.Value.AssetID
 }
 
@@ -22,15 +20,15 @@ func (o *Output) Amount() uint64 {
 	return o.body.Source.Value.Amount
 }
 
-func (o *Output) ControlProgram() bc.Program {
+func (o *Output) ControlProgram() Program {
 	return o.body.ControlProgram
 }
 
-func (o *Output) RefDataHash() bc.Hash {
+func (o *Output) RefDataHash() Hash {
 	return refDataHash(o.body.Data)
 }
 
-func newOutput(source valueSource, controlProgram bc.Program, data *EntryRef) *Output {
+func newOutput(source valueSource, controlProgram Program, data *EntryRef) *Output {
 	out := new(Output)
 	out.body.Source = source
 	out.body.ControlProgram = controlProgram

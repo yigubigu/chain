@@ -1,19 +1,17 @@
-package tx
-
-import "chain/protocol/bc"
+package bc
 
 type Issuance struct {
 	body struct {
 		Anchor  *EntryRef
-		Value   bc.AssetAmount
+		Value   AssetAmount
 		Data    *EntryRef
 		ExtHash extHash
 	}
 	witness struct {
 		Destination     valueDestination
-		InitialBlockID  bc.Hash
+		InitialBlockID  Hash
 		AssetDefinition *EntryRef // data entry
-		IssuanceProgram bc.Program
+		IssuanceProgram Program
 		Arguments       [][]byte
 		ExtHash         extHash
 	}
@@ -22,7 +20,7 @@ type Issuance struct {
 func (Issuance) Type() string           { return "issuance1" }
 func (iss *Issuance) Body() interface{} { return iss.body }
 
-func (iss *Issuance) AssetID() bc.AssetID {
+func (iss *Issuance) AssetID() AssetID {
 	return iss.body.Value.AssetID
 }
 
@@ -34,11 +32,11 @@ func (iss *Issuance) Anchor() *EntryRef {
 	return iss.body.Anchor
 }
 
-func (iss *Issuance) RefDataHash() bc.Hash {
+func (iss *Issuance) RefDataHash() Hash {
 	return refDataHash(iss.body.Data)
 }
 
-func (iss *Issuance) IssuanceProgram() bc.Program {
+func (iss *Issuance) IssuanceProgram() Program {
 	return iss.witness.IssuanceProgram
 }
 
@@ -46,7 +44,7 @@ func (iss *Issuance) Arguments() [][]byte {
 	return iss.witness.Arguments
 }
 
-func newIssuance(anchor *EntryRef, value bc.AssetAmount, data *EntryRef) *Issuance {
+func newIssuance(anchor *EntryRef, value AssetAmount, data *EntryRef) *Issuance {
 	iss := new(Issuance)
 	iss.body.Anchor = anchor
 	iss.body.Value = value

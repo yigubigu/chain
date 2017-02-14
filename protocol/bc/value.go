@@ -1,10 +1,8 @@
-package tx
-
-import "chain/protocol/bc"
+package bc
 
 type valueSource struct {
 	Ref      *EntryRef
-	Value    bc.AssetAmount
+	Value    AssetAmount
 	Position uint64 // zero unless Ref is a mux
 }
 

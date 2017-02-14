@@ -1,4 +1,4 @@
-package tx
+package bc
 
 import (
 	"fmt"
@@ -8,7 +8,6 @@ import (
 	"chain/crypto/sha3pool"
 	"chain/encoding/blockchain"
 	"chain/errors"
-	"chain/protocol/bc"
 )
 
 type (
@@ -23,24 +22,24 @@ type (
 	// pointer.
 	EntryRef struct {
 		Entry
-		ID *bc.Hash
+		ID *Hash
 	}
 
 	hasher interface {
-		Hash() (bc.Hash, error)
+		Hash() (Hash, error)
 	}
 )
 
 // Hash returns the EntryRef's cached entry ID, computing it first if
 // necessary. Satisfies the hasher interface.
-func (r *EntryRef) Hash() (bc.Hash, error) {
+func (r *EntryRef) Hash() (Hash, error) {
 	if r.ID == nil {
 		if r.Entry == nil {
-			return bc.Hash{}, nil
+			return Hash{}, nil
 		}
 		h, err := entryID(r.Entry)
 		if err != nil {
-			return bc.Hash{}, err
+			return Hash{}, err
 		}
 		r.ID = &h
 	}
@@ -51,11 +50,11 @@ func (r EntryRef) IsNil() bool {
 	return r.Entry == nil && r.ID == nil
 }
 
-type extHash bc.Hash
+type extHash Hash
 
 var errInvalidValue = errors.New("invalid value")
 
-func entryID(e Entry) (bc.Hash, error) {
+func entryID(e Entry) (Hash, error) {
 	h := sha3pool.Get256()
 	defer sha3pool.Put256(h)
 
@@ -67,13 +66,13 @@ func entryID(e Entry) (bc.Hash, error) {
 	defer sha3pool.Put256(bh)
 	err := writeForHash(bh, e.Body())
 	if err != nil {
-		return bc.Hash{}, err
+		return Hash{}, err
 	}
-	var innerHash bc.Hash
+	var innerHash Hash
 	bh.Read(innerHash[:])
 	h.Write(innerHash[:])
 
-	var hash bc.Hash
+	var hash Hash
 	h.Read(hash[:])
 
 	return hash, nil
@@ -104,15 +103,15 @@ func writeForHash(w io.Writer, c interface{}) error {
 		// TODO: The rest of these are all aliases for [32]byte. Do we
 		// really need them all?
 
-	case bc.Hash:
+	case Hash:
 		_, err := w.Write(v[:])
-		return errors.Wrap(err, "writing bc.Hash for hash")
+		return errors.Wrap(err, "writing Hash for hash")
 	case extHash:
 		_, err := w.Write(v[:])
 		return errors.Wrap(err, "writing extHash for hash")
-	case bc.AssetID:
+	case AssetID:
 		_, err := w.Write(v[:])
-		return errors.Wrap(err, "writing bc.AssetID for hash")
+		return errors.Wrap(err, "writing AssetID for hash")
 	}
 
 	// The two container types in the spec (List and Struct)

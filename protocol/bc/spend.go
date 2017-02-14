@@ -1,6 +1,4 @@
-package tx
-
-import "chain/protocol/bc"
+package bc
 
 type Spend struct {
 	body struct {
@@ -22,7 +20,7 @@ func (s *Spend) SpentOutput() *EntryRef {
 	return s.body.SpentOutput
 }
 
-func (s *Spend) RefDataHash() bc.Hash {
+func (s *Spend) RefDataHash() Hash {
 	return refDataHash(s.body.Data)
 }
 

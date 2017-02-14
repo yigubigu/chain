@@ -9,7 +9,6 @@ import (
 	// TODO(bobg): very little of this package depends on bc, consider trying to remove the dependency
 	"chain/errors"
 	"chain/protocol/bc"
-	"chain/protocol/tx"
 )
 
 const initialRunLimit = 10000
@@ -34,8 +33,8 @@ type virtualMachine struct {
 	dataStack [][]byte
 	altStack  [][]byte
 
-	txHeaderRef *tx.EntryRef
-	input       *tx.EntryRef // input.Entry must be non-nil
+	txHeaderRef *bc.EntryRef
+	input       *bc.EntryRef // input.Entry must be non-nil
 
 	block *bc.Block
 }
@@ -47,7 +46,7 @@ var ErrFalseVMResult = errors.New("false VM result")
 // execution.
 var TraceOut io.Writer
 
-func VerifyTxInput(hdrRef, input *tx.EntryRef) (err error) {
+func VerifyTxInput(hdrRef, input *bc.EntryRef) (err error) {
 	defer func() {
 		if panErr := recover(); panErr != nil {
 			err = ErrUnexpected
@@ -56,7 +55,7 @@ func VerifyTxInput(hdrRef, input *tx.EntryRef) (err error) {
 	return verifyTxInput(hdrRef, input)
 }
 
-func verifyTxInput(hdrRef, input *tx.EntryRef) error {
+func verifyTxInput(hdrRef, input *bc.EntryRef) error {
 	hdr := hdrRef.Entry.(*tx.Header)
 	expansionReserved := hdr.Version() == 1
 

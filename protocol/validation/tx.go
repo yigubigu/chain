@@ -9,7 +9,6 @@ import (
 	"chain/math/checked"
 	"chain/protocol/bc"
 	"chain/protocol/state"
-	"chain/protocol/tx"
 	"chain/protocol/vm"
 	"chain/protocol/vmutil"
 )
@@ -122,7 +121,7 @@ func ConfirmTx(snapshot *state.Snapshot, initialBlockHash bc.Hash, block *bc.Blo
 //
 // Result is nil for well-formed transactions, ErrBadTx with
 // supporting detail otherwise.
-func CheckTxWellFormed(hdrRef *tx.EntryRef) error {
+func CheckTxWellFormed(hdrRef *bc.EntryRef) error {
 	hdr := hdrRef.Entry.(*tx.Header)
 	spends, issuances, err := hdr.Inputs()
 	if err != nil {
@@ -259,7 +258,7 @@ func CheckTxWellFormed(hdrRef *tx.EntryRef) error {
 	}
 
 	// verifyFn returns a closure suitable for use in errgroup.Group.Go
-	verifyFn := func(e *tx.EntryRef) func() error {
+	verifyFn := func(e *bc.EntryRef) func() error {
 		return func() error {
 			err := vm.VerifyTxInput(hdrRef, e)
 			if err != nil {

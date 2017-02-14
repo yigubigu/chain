@@ -1,6 +1,4 @@
-package tx
-
-import "chain/protocol/bc"
+package bc
 
 type Header struct {
 	body struct {
@@ -31,15 +29,15 @@ func (h *Header) Results() []*EntryRef {
 	return h.body.Results
 }
 
-func (h *Header) RefDataHash() bc.Hash {
+func (h *Header) RefDataHash() Hash {
 	return refDataHash(h.body.Data)
 }
 
 // Inputs returns all input entries (as two lists: spends and
 // issuances) reachable from a header's result entries.
 func (h *Header) Inputs() (spends, issuances []*EntryRef, err error) {
-	sMap := make(map[bc.Hash]*EntryRef)
-	iMap := make(map[bc.Hash]*EntryRef)
+	sMap := make(map[Hash]*EntryRef)
+	iMap := make(map[Hash]*EntryRef)
 
 	// Declare accum before assigning it, so it can reference itself
 	// recursively.

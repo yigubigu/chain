@@ -6,7 +6,6 @@ import (
 	"math"
 
 	"chain/protocol/bc"
-	"chain/protocol/tx"
 )
 
 func opCheckOutput(vm *virtualMachine) error {
@@ -51,15 +50,15 @@ func opCheckOutput(vm *virtualMachine) error {
 	}
 	// xxx check len(outputID)
 
-	var o *tx.Output
-	hdr := vm.txHeaderRef.Entry.(*tx.Header)
+	var o *bc.Output
+	hdr := vm.txHeaderRef.Entry.(*bc.Header)
 	for _, resultRef := range hdr.Results() {
 		id, err := resultRef.Hash()
 		if err != nil {
 			// xxx
 		}
 		if bytes.Equal(outputID, id[:]) {
-			o = resultRef.Entry.(*tx.Output)
+			o = resultRef.Entry.(*bc.Output)
 			break
 		}
 	}
@@ -103,18 +102,18 @@ func opAsset(vm *virtualMachine) error {
 	var assetID bc.AssetID
 
 	switch e := vm.input.Entry.(type) {
-	case *tx.Spend:
+	case *bc.Spend:
 		oEntry := e.SpentOutput().Entry
 		if oEntry == nil {
 			// xxx error
 		}
-		o, ok := oEntry.(*tx.Output)
+		o, ok := oEntry.(*bc.Output)
 		if !ok {
 			// xxx error
 		}
 		assetID = o.AssetID()
 
-	case *tx.Issuance:
+	case *bc.Issuance:
 		assetID = e.AssetID()
 
 	default:
@@ -137,18 +136,18 @@ func opAmount(vm *virtualMachine) error {
 	var amount uint64
 
 	switch e := vm.input.Entry.(type) {
-	case *tx.Spend:
+	case *bc.Spend:
 		oEntry := e.SpentOutput().Entry
 		if oEntry == nil {
 			// xxx error
 		}
-		o, ok := oEntry.(*tx.Output)
+		o, ok := oEntry.(*bc.Output)
 		if !ok {
 			// xxx error
 		}
 		amount = o.Amount()
 
-	case *tx.Issuance:
+	case *bc.Issuance:
 		amount = e.Amount()
 
 	default:
@@ -181,7 +180,7 @@ func opMinTime(vm *virtualMachine) error {
 		return err
 	}
 
-	hdr := vm.txHeaderRef.Entry.(*tx.Header)
+	hdr := vm.txHeaderRef.Entry.(*bc.Header)
 	return vm.pushInt64(int64(hdr.MinTimeMS()), true)
 }
 
@@ -195,7 +194,7 @@ func opMaxTime(vm *virtualMachine) error {
 		return err
 	}
 
-	hdr := vm.txHeaderRef.Entry.(*tx.Header)
+	hdr := vm.txHeaderRef.Entry.(*bc.Header)
 	maxTime := hdr.MaxTimeMS()
 	if maxTime == 0 || maxTime > math.MaxInt64 {
 		maxTime = uint64(math.MaxInt64)
@@ -217,9 +216,9 @@ func opRefDataHash(vm *virtualMachine) error {
 	var h bc.Hash
 
 	switch e := vm.input.Entry.(type) {
-	case *tx.Spend:
+	case *bc.Spend:
 		h = e.RefDataHash()
-	case *tx.Issuance:
+	case *bc.Issuance:
 		h = e.RefDataHash()
 	default:
 		// xxx error
@@ -238,7 +237,7 @@ func opTxRefDataHash(vm *virtualMachine) error {
 		return err
 	}
 
-	hdr := vm.txHeaderRef.Entry.(*tx.Header)
+	hdr := vm.txHeaderRef.Entry.(*bc.Header)
 	h := hdr.RefDataHash()
 	return vm.push(h[:], true)
 }
@@ -248,7 +247,7 @@ func opOutputID(vm *virtualMachine) error {
 		return ErrContext
 	}
 
-	sp, ok := vm.input.Entry.(*tx.Spend)
+	sp, ok := vm.input.Entry.(*bc.Spend)
 	if !ok {
 		return ErrContext
 	}
@@ -274,7 +273,7 @@ func opNonce(vm *virtualMachine) error {
 		return ErrContext
 	}
 
-	_, ok := vm.input.Entry.(*tx.Issuance)
+	_, ok := vm.input.Entry.(*bc.Issuance)
 	if !ok {
 		return ErrContext
 	}

@@ -1,19 +1,17 @@
-package tx
+package bc
 
 import (
 	"encoding/hex"
 	"testing"
-
-	"chain/protocol/bc"
 )
 
 func TestTxHashes(t *testing.T) {
 	cases := []struct {
-		txdata *bc.TxData
-		hash   bc.Hash
+		txdata *TxData
+		hash   Hash
 	}{
 		{
-			txdata: &bc.TxData{},
+			txdata: &TxData{},
 			hash:   mustDecodeHash("827b87bafb63c999922d0190010351435bb73a4d96612beea007b4d811607fb0"),
 		},
 		{
@@ -37,7 +35,7 @@ func TestTxHashes(t *testing.T) {
 }
 
 func BenchmarkHashEmptyTx(b *testing.B) {
-	tx := &bc.TxData{}
+	tx := &TxData{}
 	for i := 0; i < b.N; i++ {
 		_, err := TxHashes(tx)
 		if err != nil {
@@ -67,17 +65,17 @@ func mustDecodeHash(hash string) (h [32]byte) {
 	return h
 }
 
-func sampleTx() *bc.TxData {
-	assetID := bc.ComputeAssetID([]byte{1}, mustDecodeHash("03deff1d4319d67baa10a6d26c1fea9c3e8d30e33474efee1a610a9bb49d758d"), 1, bc.EmptyStringHash)
-	return &bc.TxData{
+func sampleTx() *TxData {
+	assetID := ComputeAssetID([]byte{1}, mustDecodeHash("03deff1d4319d67baa10a6d26c1fea9c3e8d30e33474efee1a610a9bb49d758d"), 1, EmptyStringHash)
+	return &TxData{
 		Version: 1,
-		Inputs: []*bc.TxInput{
-			bc.NewSpendInput(bc.OutputID{mustDecodeHash("dd385f6fe25d91d8c1bd0fa58951ad56b0c5229dcc01f61d9f9e8b9eb92d3292")}, nil, assetID, 1000000000000, []byte{1}, []byte("input")),
-			bc.NewSpendInput(bc.OutputID{bc.Hash{17}}, nil, assetID, 1, []byte{2}, []byte("input2")),
+		Inputs: []*TxInput{
+			NewSpendInput(OutputID{mustDecodeHash("dd385f6fe25d91d8c1bd0fa58951ad56b0c5229dcc01f61d9f9e8b9eb92d3292")}, nil, assetID, 1000000000000, []byte{1}, []byte("input")),
+			NewSpendInput(OutputID{Hash{17}}, nil, assetID, 1, []byte{2}, []byte("input2")),
 		},
-		Outputs: []*bc.TxOutput{
-			bc.NewTxOutput(assetID, 600000000000, []byte{1}, nil),
-			bc.NewTxOutput(assetID, 400000000000, []byte{2}, nil),
+		Outputs: []*TxOutput{
+			NewTxOutput(assetID, 600000000000, []byte{1}, nil),
+			NewTxOutput(assetID, 400000000000, []byte{2}, nil),
 		},
 		MinTime:       1492590000,
 		MaxTime:       1492590591,

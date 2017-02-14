@@ -1,4 +1,4 @@
-package tx
+package bc
 
 type TimeRange struct {
 	body struct {

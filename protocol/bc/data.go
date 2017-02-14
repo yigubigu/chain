@@ -1,8 +1,7 @@
-package tx
+package bc
 
 import (
 	"chain/crypto/sha3pool"
-	"chain/protocol/bc"
 )
 
 // A "Data" entry represents some arbitrary data
@@ -21,13 +20,13 @@ import (
 // Note that the body of this entry is a hash (of the underlying data);
 // when a Data entry is hashed, its body_hash is a hash of that hash.
 type Data struct {
-	body bc.Hash
+	body Hash
 }
 
 func (Data) Type() string         { return "data1" }
 func (d *Data) Body() interface{} { return d.body }
 
-func NewData(hash bc.Hash) *Data {
+func NewData(hash Hash) *Data {
 	d := new(Data)
 	d.body = hash
 	return d
@@ -36,14 +35,14 @@ func NewData(hash bc.Hash) *Data {
 // refDataHash returns the data hash in e, which must be nil or a data
 // entry pointer. If e is nil (or e.IsNil() is true) the result is the
 // hash of the empty string.
-func refDataHash(e *EntryRef) bc.Hash {
+func refDataHash(e *EntryRef) Hash {
 	if e == nil || e.Entry == nil {
-		return bc.EmptyStringHash
+		return EmptyStringHash
 	}
 	return e.Entry.(*data).body
 }
 
-func HashData(data []byte) (h bc.Hash) {
+func HashData(data []byte) (h Hash) {
 	sha3pool.Sum256(h[:], data)
 	return
 }

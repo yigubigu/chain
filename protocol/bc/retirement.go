@@ -1,4 +1,4 @@
-package tx
+package bc
 
 type Retirement struct {
 	body struct {
