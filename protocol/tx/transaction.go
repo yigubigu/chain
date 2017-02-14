@@ -53,7 +53,7 @@ func TxHashes(oldTx *bc.TxData) (hashes *bc.TxHashes, err error) {
 
 	hashes.VMContexts = make([]*bc.VMContext, len(oldTx.Inputs))
 
-	getRefDataHash := func(id entryRef) (bc.Hash, error) {
+	getRefDataHash := func(id bc.Hash) (bc.Hash, error) {
 		dEntry, ok := entries[id]
 		if !ok {
 			return bc.EmptyStringHash, nil
