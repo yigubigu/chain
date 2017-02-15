@@ -1,10 +1,6 @@
 package bc
 
-import (
-	"io"
-
-	"chain/crypto/sha3pool"
-)
+import "chain/crypto/sha3pool"
 
 // A "Data" entry represents some arbitrary data
 // the transaction author wants the current transaction to commit to,
@@ -29,6 +25,7 @@ const typeData = "data1"
 
 func (Data) Type() string         { return typeData }
 func (d *Data) Body() interface{} { return d.body }
+func (d *Data) Witness() interface{} { return nil }
 
 func NewData(hash Hash) *Data {
 	d := new(Data)

@@ -1,9 +1,8 @@
 package bc
 
 import (
-	"io"
-
 	"chain/encoding/blockchain"
+	"io"
 )
 
 type Header struct {
@@ -18,8 +17,9 @@ type Header struct {
 
 const typeHeader = "txheader"
 
-func (Header) Type() string         { return typeHeader }
-func (h *Header) Body() interface{} { return h.body }
+func (Header) Type() string            { return typeHeader }
+func (h *Header) Body() interface{}    { return &h.body }
+func (h *Header) Witness() interface{} { return nil }
 
 func (h *Header) Version() uint64 {
 	return h.body.Version
@@ -45,12 +45,16 @@ func (h *Header) Walk(visitor func(*EntryRef) error) error {
 	visited := make(map[Hash]bool)
 	visit := func(e *EntryRef) error {
 		if e == nil {
-			return
+			return nil
 		}
-		if visited[e.Hash()] {
-			return
+		h, err := e.Hash()
+		if err != nil {
+			return err
 		}
-		visited[e.Hash()] = true
+		if visited[h] {
+			return nil
+		}
+		visited[h] = true
 		return visitor(e)
 	}
 	err := visit(h.body.Data)
@@ -68,7 +72,7 @@ func (h *Header) Walk(visitor func(*EntryRef) error) error {
 			if err != nil {
 				return err
 			}
-			err = visit(e2.body.EntryRef)
+			err = visit(e2.body.Data)
 			if err != nil {
 				return err
 			}
@@ -132,7 +136,7 @@ func (h *Header) Walk(visitor func(*EntryRef) error) error {
 // issuances) reachable from a header's result entries.
 func (h *Header) Inputs() (spends, issuances []*EntryRef) {
 	h.Walk(func(e *EntryRef) error {
-		switch e2 := e.Entry.(type) {
+		switch e.Entry.(type) {
 		case *Spend:
 			spends = append(spends, e)
 		case *Issuance:
@@ -153,49 +157,33 @@ func newHeader(version uint64, results []*EntryRef, data *EntryRef, minTimeMS, m
 	return h
 }
 
-func (h *Header) WriteTo(w io.Writer) (int64, error) {
-	n, err := blockchain.WriteVarint63(w, h.body.Version)
-	if err != nil {
-		return int64(n), err
-	}
-	n2, err := blockchain.WriteVarint63(w, h.body.MinTimeMS)
-	n += n2
-	if err != nil {
-		return int64(n), err
-	}
-	n2, err = blockchain.WriteVarint63(w, h.body.MaxTimeMS)
-	n += n2
-	if err != nil {
-		return int64(n), err
-	}
-}
-
-func (h *Header) ReadFrom(r io.Reader) (int64, error) {
-	// xxx
-}
-
-func (h *Header) WriteTxTo(w io.Writer) (int64, error) {
+// writeTx writes the Header to w, followed by a varint31 count of
+// entries, followed by all the entries reachable from the Header.
+func (h *Header) writeTx(w io.Writer) error {
 	var entries []*EntryRef
 	h.Walk(func(e *EntryRef) error {
-		if e.Entry != nil {
+		if e.Entry != h {
 			entries = append(entries, e)
 		}
+		return nil
 	})
-	n, err := h.WriteTo(w)
+	err := serializeEntry(w, h)
 	if err != nil {
-		return n, err
+		return err
 	}
-	n2, err := blockchain.WriteVarint31(w, uint64(len(entries)))
-	n += int64(n2)
-	if err != nil {
-		return n, err
-	}
+	_, err = blockchain.WriteVarint31(w, uint64(len(entries)))
 	for _, e := range entries {
-		n3, err := e.WriteEntry(w)
-		n += n3
+		err = e.writeEntry(w)
 		if err != nil {
-			return n, err
+			return err
 		}
 	}
-	return n, nil
+	return nil
+}
+
+// readTx reads the output of writeTx and populates entry pointers in
+// the Header and the entries reachable from it.
+func (h *Header) readTx(r io.Reader) error {
+	// xxx
+	return nil
 }

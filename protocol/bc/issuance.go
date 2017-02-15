@@ -1,7 +1,5 @@
 package bc
 
-import "io"
-
 type Issuance struct {
 	body struct {
 		Anchor  *EntryRef
@@ -21,8 +19,9 @@ type Issuance struct {
 
 const typeIssuance = "issuance1"
 
-func (Issuance) Type() string           { return typeIssuance }
-func (iss *Issuance) Body() interface{} { return iss.body }
+func (Issuance) Type() string              { return typeIssuance }
+func (iss *Issuance) Body() interface{}    { return &iss.body }
+func (iss *Issuance) Witness() interface{} { return &iss.witness }
 
 func (iss *Issuance) AssetID() AssetID {
 	return iss.body.Value.AssetID
@@ -54,12 +53,4 @@ func newIssuance(anchor *EntryRef, value AssetAmount, data *EntryRef) *Issuance 
 	iss.body.Value = value
 	iss.body.Data = data
 	return iss
-}
-
-func (iss *Issuance) WriteTo(w io.Writer) (int64, error) {
-	// xxx
-}
-
-func (iss *Issuance) ReadFrom(r io.Reader) (int64, error) {
-	// xxx
 }

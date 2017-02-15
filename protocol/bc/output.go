@@ -1,7 +1,5 @@
 package bc
 
-import "io"
-
 type Output struct {
 	body struct {
 		Source         valueSource
@@ -13,8 +11,9 @@ type Output struct {
 
 const typeOutput = "output1"
 
-func (Output) Type() string         { return typeOutput }
-func (o *Output) Body() interface{} { return o.body }
+func (Output) Type() string            { return typeOutput }
+func (o *Output) Body() interface{}    { return &o.body }
+func (o *Output) Witness() interface{} { return nil }
 
 func (o *Output) AssetID() AssetID {
 	return o.body.Source.Value.AssetID
@@ -38,12 +37,4 @@ func newOutput(source valueSource, controlProgram Program, data *EntryRef) *Outp
 	out.body.ControlProgram = controlProgram
 	out.body.Data = data
 	return out
-}
-
-func (o *Output) WriteTo(w io.Writer) (int64, error) {
-	// xxx
-}
-
-func (o *Output) ReadFrom(r io.Reader) (int64, error) {
-	// xxx
 }
