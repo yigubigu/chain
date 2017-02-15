@@ -1,8 +1,9 @@
 package bc
 
 import (
-	"chain/encoding/blockchain"
 	"io"
+
+	"chain/encoding/blockchain"
 )
 
 type Header struct {
@@ -40,53 +41,106 @@ func (h *Header) RefDataHash() Hash {
 	return refDataHash(h.body.Data)
 }
 
+func (h *Header) Walk(visitor func(*EntryRef) error) error {
+	visited := make(map[Hash]bool)
+	visit := func(e *EntryRef) error {
+		if e == nil {
+			return
+		}
+		if visited[e.Hash()] {
+			return
+		}
+		visited[e.Hash()] = true
+		return visitor(e)
+	}
+	err := visit(h.body.Data)
+	if err != nil {
+		return err
+	}
+	for _, res := range h.body.Results {
+		err = visit(res)
+		if err != nil {
+			return err
+		}
+		switch e2 := res.Entry.(type) {
+		case *Issuance:
+			err = visit(e2.body.Anchor)
+			if err != nil {
+				return err
+			}
+			err = visit(e2.body.EntryRef)
+			if err != nil {
+				return err
+			}
+			err = visit(e2.witness.Destination.Ref)
+			if err != nil {
+				return err
+			}
+			err = visit(e2.witness.AssetDefinition)
+			if err != nil {
+				return err
+			}
+		case *mux:
+			for _, vs := range e2.body.Sources {
+				err = visit(vs.Ref)
+				if err != nil {
+					return err
+				}
+			}
+		case *Nonce:
+			err = visit(e2.body.TimeRange)
+			if err != nil {
+				return err
+			}
+		case *Output:
+			err = visit(e2.body.Source.Ref)
+			if err != nil {
+				return err
+			}
+			err = visit(e2.body.Data)
+			if err != nil {
+				return err
+			}
+		case *Retirement:
+			err = visit(e2.body.Source.Ref)
+			if err != nil {
+				return err
+			}
+			err = visit(e2.body.Data)
+			if err != nil {
+				return err
+			}
+		case *Spend:
+			err = visit(e2.body.SpentOutput)
+			if err != nil {
+				return err
+			}
+			err = visit(e2.body.Data)
+			if err != nil {
+				return err
+			}
+			err = visit(e2.witness.Destination.Ref)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // Inputs returns all input entries (as two lists: spends and
 // issuances) reachable from a header's result entries.
-func (h *Header) Inputs() (spends, issuances []*EntryRef, err error) {
-	sMap := make(map[Hash]*EntryRef)
-	iMap := make(map[Hash]*EntryRef)
-
-	// Declare accum before assigning it, so it can reference itself
-	// recursively.
-	var accum func(*EntryRef) error
-	accum = func(ref *EntryRef) error {
-		switch e := ref.Entry.(type) {
+func (h *Header) Inputs() (spends, issuances []*EntryRef) {
+	h.Walk(func(e *EntryRef) error {
+		switch e2 := e.Entry.(type) {
 		case *Spend:
-			hash, err := ref.Hash()
-			if err != nil {
-				return err
-			}
-			sMap[hash] = ref
-
+			spends = append(spends, e)
 		case *Issuance:
-			hash, err := ref.Hash()
-			if err != nil {
-				return err
-			}
-			iMap[hash] = ref
-
-		case *mux:
-			for _, s := range e.body.Sources {
-				accum(s.Ref)
-			}
+			issuances = append(issuances, e)
 		}
 		return nil
-	}
-
-	for _, r := range h.body.Results {
-		err = accum(r)
-		if err != nil {
-			return nil, nil, err
-		}
-	}
-
-	for _, e := range sMap {
-		spends = append(spends, e)
-	}
-	for _, e := range iMap {
-		issuances = append(issuances, e)
-	}
-	return spends, issuances, nil
+	})
+	return
 }
 
 func newHeader(version uint64, results []*EntryRef, data *EntryRef, minTimeMS, maxTimeMS uint64) *Header {
@@ -118,4 +172,30 @@ func (h *Header) WriteTo(w io.Writer) (int64, error) {
 
 func (h *Header) ReadFrom(r io.Reader) (int64, error) {
 	// xxx
+}
+
+func (h *Header) WriteTxTo(w io.Writer) (int64, error) {
+	var entries []*EntryRef
+	h.Walk(func(e *EntryRef) error {
+		if e.Entry != nil {
+			entries = append(entries, e)
+		}
+	})
+	n, err := h.WriteTo(w)
+	if err != nil {
+		return n, err
+	}
+	n2, err := blockchain.WriteVarint31(w, uint64(len(entries)))
+	n += int64(n2)
+	if err != nil {
+		return n, err
+	}
+	for _, e := range entries {
+		n3, err := e.WriteEntry(w)
+		n += n3
+		if err != nil {
+			return n, err
+		}
+	}
+	return n, nil
 }

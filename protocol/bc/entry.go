@@ -52,7 +52,7 @@ func (r EntryRef) IsNil() bool {
 	return r.Entry == nil && r.ID == nil
 }
 
-func (ref *EntryRef) WriteTo(w io.Writer) (int64, error) {
+func (ref *EntryRef) WriteEntry(w io.Writer) (int64, error) {
 	n, err := blockchain.WriteVarstr31(w, []byte(ref.Type()))
 	if err != nil {
 		return int64(n), err
@@ -61,7 +61,7 @@ func (ref *EntryRef) WriteTo(w io.Writer) (int64, error) {
 	return int64(n) + n2, err
 }
 
-func (ref *EntryRef) ReadFrom(r io.Reader) (int64, error) {
+func (ref *EntryRef) ReadEntry(r io.Reader) (int64, error) {
 	typ, n, err := blockchain.ReadVarstr31(r)
 	if err != nil {
 		return int64(n), err
@@ -85,6 +85,8 @@ func (ref *EntryRef) ReadFrom(r io.Reader) (int64, error) {
 		ref.Entry = new(Spend)
 	case typeTimeRange:
 		ref.Entry = new(TimeRange)
+	default:
+		return int64(n), fmt.Errorf("unknown type %s", typ)
 	}
 	n2, err := ref.Entry.ReadFrom(r)
 	return int64(n) + n2, err
