@@ -10,7 +10,6 @@ import (
 	"chain/protocol/bc"
 	"chain/protocol/state"
 	"chain/protocol/vm"
-	"chain/protocol/vmutil"
 )
 
 // ErrBadTx is returned for transactions failing validation
@@ -63,53 +62,66 @@ func badTxErrf(err error, f string, args ...interface{}) error {
 // to the pool.
 //
 // ConfirmTx must not mutate the snapshot or the block.
-func ConfirmTx(snapshot *state.Snapshot, initialBlockHash bc.Hash, block *bc.Block, tx *bc.Tx) error {
-	if tx.Version < 1 || tx.Version > block.Version {
-		return badTxErrf(errTxVersion, "unknown transaction version %d for block version %d", tx.Version, block.Version)
+func ConfirmTx(snapshot *state.Snapshot, initialBlockHash bc.Hash, block *bc.Block, hdrRef *bc.EntryRef) error {
+	hdr := hdrRef.Entry.(*bc.Header)
+
+	if hdr.Version() < 1 || hdr.Version() > block.Version {
+		return badTxErrf(errTxVersion, "unknown transaction version %d for block version %d", hdr.Version(), block.Version)
 	}
 
-	if block.TimestampMS < tx.MinTime {
+	if block.TimestampMS < hdr.MinTimeMS() {
 		return badTxErr(errNotYet)
 	}
-	if tx.MaxTime > 0 && block.TimestampMS > tx.MaxTime {
+	if hdr.MaxTimeMS() > 0 && block.TimestampMS > hdr.MaxTimeMS() {
 		return badTxErr(errTooLate)
 	}
 
-	for i, txin := range tx.Inputs {
-		if ii, ok := txin.TypedInput.(*bc.IssuanceInput); ok {
-			if txin.AssetVersion != 1 {
-				continue
-			}
-			if ii.InitialBlock != initialBlockHash {
-				return badTxErr(errWrongBlockchain)
-			}
-			if len(ii.Nonce) == 0 {
-				continue
-			}
-			if tx.MinTime == 0 || tx.MaxTime == 0 {
-				return badTxErr(errTimelessIssuance)
-			}
-			if block.TimestampMS < tx.MinTime || block.TimestampMS > tx.MaxTime {
-				return badTxErr(errIssuanceTime)
-			}
-			iHash, err := tx.IssuanceHash(i)
-			if err != nil {
-				return err
-			}
-			if _, ok2 := snapshot.Issuances[iHash]; ok2 {
-				return badTxErr(errDuplicateIssuance)
-			}
-			continue
+	spends, issuances := hdr.Inputs()
+
+	for _, issRef := range issuances {
+		iss := issRef.Entry.(*bc.Issuance)
+		if iss.InitialBlockID() != initialBlockHash {
+			return badTxErr(errWrongBlockchain)
 		}
+		// xxx check for empty nonce? old code had "if len(ii.Nonce) == 0 { continue }"
+		anchorRef := iss.Anchor()
+		if anchorRef == nil {
+			// xxx continue ??
+		}
+		nonce, ok := anchorRef.Entry.(*bc.Nonce)
+		if !ok {
+			// xxx continue ??
+		}
+		trRef := nonce.TimeRange()
+		if trRef == nil {
+			// xxx continue ??
+		}
+		tr, ok := trRef.Entry.(*bc.TimeRange)
+		if !ok {
+			// xxx continue ??
+		}
+		if tr.MinTimeMS() == 0 || tr.MaxTimeMS() == 0 {
+			return badTxErr(errTimelessIssuance)
+		}
+		if block.TimestampMS < tr.MinTimeMS() || block.TimestampMS > tr.MaxTimeMS() {
+			return badTxErr(errIssuanceTime)
+		}
+		// xxx check issuance memory
+	}
 
-		// txin is a spend
-
-		// Lookup the prevout in the blockchain state tree.
-		k, val := state.OutputTreeItem(txin.SpentOutputID())
+	for _, spRef := range spends {
+		sp := spRef.Entry.(*bc.Spend)
+		spentOutputID, err := sp.SpentOutput().Hash()
+		if err != nil {
+			return err
+		}
+		k, val := state.OutputTreeItem(bc.OutputID{spentOutputID})
 		if !snapshot.Tree.Contains(k, val) {
-			return badTxErrf(errInvalidOutput, "output %s for input %d is invalid", txin.SpentOutputID().String(), i)
+			inputID, _ := spRef.Hash()
+			return badTxErrf(errInvalidOutput, "output %x for spend input %x is invalid", spentOutputID[:], inputID[:])
 		}
 	}
+
 	return nil
 }
 
@@ -122,11 +134,8 @@ func ConfirmTx(snapshot *state.Snapshot, initialBlockHash bc.Hash, block *bc.Blo
 // Result is nil for well-formed transactions, ErrBadTx with
 // supporting detail otherwise.
 func CheckTxWellFormed(hdrRef *bc.EntryRef) error {
-	hdr := hdrRef.Entry.(*tx.Header)
-	spends, issuances, err := hdr.Inputs()
-	if err != nil {
-		return err
-	}
+	hdr := hdrRef.Entry.(*bc.Header)
+	spends, issuances := hdr.Inputs()
 
 	nInputs := len(spends) + len(issuances)
 	if nInputs == 0 {
@@ -142,7 +151,7 @@ func CheckTxWellFormed(hdrRef *bc.EntryRef) error {
 		allIssuancesWithEmptyNonces = false
 	} else {
 		for _, issRef := range issuances {
-			iss, ok := issRef.Entry.(*tx.Issuance)
+			iss, ok := issRef.Entry.(*bc.Issuance)
 			if !ok {
 				// xxx (impossible?) error
 			}
@@ -170,9 +179,9 @@ func CheckTxWellFormed(hdrRef *bc.EntryRef) error {
 	parity := make(map[bc.AssetID]int64)
 
 	for _, spRef := range spends {
-		sp := spRef.Entry.(*tx.Spend)
+		sp := spRef.Entry.(*bc.Spend)
 		outRef := sp.SpentOutput()
-		out := outRef.Entry.(*tx.Output)
+		out := outRef.Entry.(*bc.Output)
 		amount := out.Amount()
 		if amount > math.MaxInt64 {
 			return badTxErr(errInputTooBig)
@@ -195,7 +204,7 @@ func CheckTxWellFormed(hdrRef *bc.EntryRef) error {
 	}
 
 	for _, issRef := range issuances {
-		iss := issRef.Entry.(*tx.Issuance)
+		iss := issRef.Entry.(*bc.Issuance)
 		amount := iss.Amount()
 		if amount > math.MaxInt64 {
 			return badTxErr(errInputTooBig)
@@ -215,7 +224,7 @@ func CheckTxWellFormed(hdrRef *bc.EntryRef) error {
 			}
 		}
 		nonceRef := iss.Anchor()
-		_, ok = nonceRef.Entry.(*tx.Nonce)
+		_, ok = nonceRef.Entry.(*bc.Nonce)
 		if !ok {
 			// xxx
 		}
@@ -227,7 +236,7 @@ func CheckTxWellFormed(hdrRef *bc.EntryRef) error {
 	}
 
 	for _, outRef := range outRefs {
-		out := outRef.Entry.(*tx.Output)
+		out := outRef.Entry.(*bc.Output)
 		if txVersion == 1 {
 			prog := out.ControlProgram()
 			if prog.VMVersion != 1 {
@@ -281,38 +290,39 @@ func CheckTxWellFormed(hdrRef *bc.EntryRef) error {
 }
 
 // ApplyTx updates the state tree with all the changes to the ledger.
-func ApplyTx(snapshot *state.Snapshot, tx *bc.Tx) error {
-	for i, in := range tx.Inputs {
-		if ii, ok := in.TypedInput.(*bc.IssuanceInput); ok {
-			if len(ii.Nonce) > 0 {
-				iHash, err := tx.IssuanceHash(i)
-				if err != nil {
-					return err
-				}
-				snapshot.Issuances[iHash] = tx.MaxTime
+func ApplyTx(snapshot *state.Snapshot, hdrRef *bc.EntryRef) error {
+	hdr := hdrRef.Entry.(*bc.Header)
+	spends, issuances := hdr.Inputs()
+
+	for range issuances {
+		// xxx add issuance to the issuance memory
+	}
+
+	for _, spRef := range spends {
+		sp := spRef.Entry.(*bc.Spend)
+		spentOutputID, err := sp.SpentOutput().Hash()
+		if err != nil {
+			return err
+		}
+		err = snapshot.Tree.Delete(spentOutputID.Bytes())
+		if err != nil {
+			return err
+		}
+	}
+
+	for _, resultRef := range hdr.Results() {
+		if _, ok := resultRef.Entry.(*bc.Spend); ok {
+			// Insert new outputs into the state tree.
+			outputID, err := resultRef.Hash()
+			if err != nil {
+				return err
 			}
-			continue
-		}
-
-		si := in.TypedInput.(*bc.SpendInput)
-
-		// Remove the consumed output from the state tree.
-		uid := si.SpentOutputID
-		err := snapshot.Tree.Delete(uid.Bytes())
-		if err != nil {
-			return err
+			err = snapshot.Tree.Insert(state.OutputTreeItem(bc.OutputID{outputID}))
+			if err != nil {
+				return err
+			}
 		}
 	}
 
-	for i, out := range tx.Outputs {
-		if vmutil.IsUnspendable(out.ControlProgram) {
-			continue
-		}
-		// Insert new outputs into the state tree.
-		err := snapshot.Tree.Insert(state.OutputTreeItem(tx.OutputID(uint32(i))))
-		if err != nil {
-			return err
-		}
-	}
 	return nil
 }

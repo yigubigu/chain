@@ -39,6 +39,10 @@ func (iss *Issuance) RefDataHash() Hash {
 	return refDataHash(iss.body.Data)
 }
 
+func (iss *Issuance) InitialBlockID() Hash {
+	return iss.witness.InitialBlockID
+}
+
 func (iss *Issuance) IssuanceProgram() Program {
 	return iss.witness.IssuanceProgram
 }

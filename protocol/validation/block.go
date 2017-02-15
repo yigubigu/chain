@@ -91,7 +91,7 @@ func ValidateBlock(ctx context.Context, snapshot *state.Snapshot, initialBlockHa
 
 	// Distribute checking well-formedness of the transactions across
 	// GOMAXPROCS goroutines.
-	ch := make(chan *bc.Tx, len(block.Transactions))
+	ch := make(chan *bc.EntryRef, len(block.Transactions))
 	for i := 0; i < runtime.GOMAXPROCS(0); i++ {
 		g.Go(func() error {
 			for tx := range ch {
