@@ -1,5 +1,10 @@
 package bc
 
+import (
+	"chain/encoding/blockchain"
+	"io"
+)
+
 type Header struct {
 	body struct {
 		Version              uint64
@@ -10,7 +15,9 @@ type Header struct {
 	}
 }
 
-func (Header) Type() string         { return "txheader" }
+const typeHeader = "txheader"
+
+func (Header) Type() string         { return typeHeader }
 func (h *Header) Body() interface{} { return h.body }
 
 func (h *Header) Version() uint64 {
@@ -90,4 +97,25 @@ func newHeader(version uint64, results []*EntryRef, data *EntryRef, minTimeMS, m
 	h.body.MinTimeMS = minTimeMS
 	h.body.MaxTimeMS = maxTimeMS
 	return h
+}
+
+func (h *Header) WriteTo(w io.Writer) (int64, error) {
+	n, err := blockchain.WriteVarint63(w, h.body.Version)
+	if err != nil {
+		return int64(n), err
+	}
+	n2, err := blockchain.WriteVarint63(w, h.body.MinTimeMS)
+	n += n2
+	if err != nil {
+		return int64(n), err
+	}
+	n2, err = blockchain.WriteVarint63(w, h.body.MaxTimeMS)
+	n += n2
+	if err != nil {
+		return int64(n), err
+	}
+}
+
+func (h *Header) ReadFrom(r io.Reader) (int64, error) {
+	// xxx
 }

@@ -1,5 +1,7 @@
 package bc
 
+import "io"
+
 type Retirement struct {
 	body struct {
 		Source  valueSource
@@ -8,7 +10,9 @@ type Retirement struct {
 	}
 }
 
-func (Retirement) Type() string         { return "retirement1" }
+const typeRetirement = "retirement1"
+
+func (Retirement) Type() string         { return typeRetirement }
 func (r *Retirement) Body() interface{} { return r.body }
 
 func newRetirement(source valueSource, data *EntryRef) *Retirement {
@@ -16,4 +20,12 @@ func newRetirement(source valueSource, data *EntryRef) *Retirement {
 	r.body.Source = source
 	r.body.Data = data
 	return r
+}
+
+func (ret *Retirement) WriteTo(w io.Writer) (int64, error) {
+	// xxx
+}
+
+func (ret *Retirement) ReadFrom(r io.Reader) (int64, error) {
+	// xxx
 }

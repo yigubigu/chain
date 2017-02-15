@@ -12,6 +12,8 @@ import (
 
 type (
 	Entry interface {
+		io.ReaderFrom
+		io.WriterTo
 		Type() string
 		Body() interface{}
 	}
@@ -48,6 +50,44 @@ func (r *EntryRef) Hash() (Hash, error) {
 
 func (r EntryRef) IsNil() bool {
 	return r.Entry == nil && r.ID == nil
+}
+
+func (ref *EntryRef) WriteTo(w io.Writer) (int64, error) {
+	n, err := blockchain.WriteVarstr31(w, []byte(ref.Type()))
+	if err != nil {
+		return int64(n), err
+	}
+	n2, err := ref.Entry.WriteTo(w)
+	return int64(n) + n2, err
+}
+
+func (ref *EntryRef) ReadFrom(r io.Reader) (int64, error) {
+	typ, n, err := blockchain.ReadVarstr31(r)
+	if err != nil {
+		return int64(n), err
+	}
+	switch string(typ) {
+	case typeData:
+		ref.Entry = new(data)
+	case typeHeader:
+		ref.Entry = new(Header)
+	case typeIssuance:
+		ref.Entry = new(Issuance)
+	case typeMux:
+		ref.Entry = new(mux)
+	case typeNonce:
+		ref.Entry = new(Nonce)
+	case typeOutput:
+		ref.Entry = new(Output)
+	case typeRetirement:
+		ref.Entry = new(Retirement)
+	case typeSpend:
+		ref.Entry = new(Spend)
+	case typeTimeRange:
+		ref.Entry = new(TimeRange)
+	}
+	n2, err := ref.Entry.ReadFrom(r)
+	return int64(n) + n2, err
 }
 
 type extHash Hash

@@ -1,6 +1,8 @@
 package bc
 
 import (
+	"io"
+
 	"chain/crypto/sha3pool"
 )
 
@@ -23,7 +25,9 @@ type Data struct {
 	body Hash
 }
 
-func (Data) Type() string         { return "data1" }
+const typeData = "data1"
+
+func (Data) Type() string         { return typeData }
 func (d *Data) Body() interface{} { return d.body }
 
 func NewData(hash Hash) *Data {
