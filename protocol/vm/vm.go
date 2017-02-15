@@ -56,7 +56,7 @@ func VerifyTxInput(hdrRef, input *bc.EntryRef) (err error) {
 }
 
 func verifyTxInput(hdrRef, input *bc.EntryRef) error {
-	hdr := hdrRef.Entry.(*tx.Header)
+	hdr := hdrRef.Entry.(*bc.Header)
 	expansionReserved := hdr.Version() == 1
 
 	f := func(prog bc.Program, args [][]byte) error {
@@ -88,15 +88,15 @@ func verifyTxInput(hdrRef, input *bc.EntryRef) error {
 	}
 
 	switch e := input.Entry.(type) {
-	case *tx.Issuance:
+	case *bc.Issuance:
 		return f(e.IssuanceProgram(), e.Arguments())
 
-	case *tx.Spend:
+	case *bc.Spend:
 		oEntry := e.SpentOutput().Entry
 		if oEntry == nil {
 			// xxx error
 		}
-		o, ok := oEntry.(*tx.Output)
+		o, ok := oEntry.(*bc.Output)
 		if !ok {
 			// xxx error
 		}
