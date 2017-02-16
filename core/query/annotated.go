@@ -120,24 +120,30 @@ func (b *Bool) UnmarshalJSON(raw []byte) error {
 
 var emptyJSONObject = json.RawMessage(`{}`)
 
-func buildAnnotatedTransaction(orig *bc.Tx, b *bc.Block, indexInBlock uint32, outpoints map[bc.OutputID]bc.Outpoint) *AnnotatedTx {
+func buildAnnotatedTransaction(orig *bc.EntryRef, b *bc.Block, indexInBlock uint32) *AnnotatedTx {
+	origID, _ := orig.Hash() // xxx ignoring error
+	hdr := orig.Entry.(*bc.Header)
+	spends, issuances := hdr.Inputs()
 	tx := &AnnotatedTx{
-		ID:            orig.ID,
+		ID:            origID,
 		Timestamp:     b.Time(),
 		BlockID:       b.Hash(),
 		BlockHeight:   b.Height,
 		Position:      indexInBlock,
 		ReferenceData: &emptyJSONObject,
-		Inputs:        make([]*AnnotatedInput, 0, len(orig.Inputs)),
-		Outputs:       make([]*AnnotatedOutput, 0, len(orig.Outputs)),
+		Inputs:        make([]*AnnotatedInput, 0, len(spends)+len(issuances)),
+		Outputs:       make([]*AnnotatedOutput, 0, len(hdr.Results())),
 	}
 	if len(orig.ReferenceData) > 0 {
 		referenceData := json.RawMessage(orig.ReferenceData)
 		tx.ReferenceData = &referenceData
 	}
 
-	for _, in := range orig.Inputs {
-		tx.Inputs = append(tx.Inputs, buildAnnotatedInput(in, outpoints))
+	for _, in := range spends {
+		tx.Inputs = append(tx.Inputs, buildAnnotatedSpend(in))
+	}
+	for _, in := range issuances {
+		tx.Inputs = append(tx.Inputs, buildAnnotatedIssuance(in))
 	}
 	for i := range orig.Outputs {
 		tx.Outputs = append(tx.Outputs, buildAnnotatedOutput(orig, uint32(i)))
@@ -145,39 +151,42 @@ func buildAnnotatedTransaction(orig *bc.Tx, b *bc.Block, indexInBlock uint32, ou
 	return tx
 }
 
-func buildAnnotatedInput(orig *bc.TxInput, outpoints map[bc.OutputID]bc.Outpoint) *AnnotatedInput {
+func buildAnnotatedSpend(orig *bc.EntryRef) *AnnotatedInput {
+	sp := orig.Entry.(*bc.Spend)
+	spentRef := sp.SpentOutput()
+	spentOutput := spentRef.Entry.(*bc.Output)
+	prevoutID, _ := spentRef.Hash() // xxx ignoring error
 	in := &AnnotatedInput{
-		AssetID:         orig.AssetID(),
-		Amount:          orig.Amount(),
+		Type:            "spend",
+		AssetID:         spentOutput.AssetID(),
+		Amount:          spentOutput.Amount(),
 		AssetDefinition: &emptyJSONObject,
 		AssetTags:       &emptyJSONObject,
 		ReferenceData:   &emptyJSONObject,
+		ControlProgram:  spentOutput.ControlProgram().Code, // xxx should annotated input preserve the vmversion field?
+		SpentOutputID:   &prevoutID,
 	}
 
-	if len(orig.ReferenceData) > 0 {
-		referenceData := json.RawMessage(orig.ReferenceData)
-		in.ReferenceData = &referenceData
+	// xxx how to populate in.ReferenceData? the blockchain no longer stores bare refdata, only its hash
+	// xxx outpoints are obsolete
+
+	return in
+}
+
+func buildAnnotatedIssuance(orig *bc.EntryRef) *AnnotatedInput {
+	iss := orig.Entry.(*bc.Issuance)
+	in := &AnnotatedInput{
+		Type:            "issue",
+		AssetID:         iss.AssetID(),
+		Amount:          iss.Amount(),
+		AssetDefinition: &emptyJSONObject,
+		AssetTags:       &emptyJSONObject,
+		ReferenceData:   &emptyJSONObject,
+		IssuanceProgram: iss.IssuanceProgram().Code, // xxx should annotated input preserve the vmversion field?
 	}
 
-	if orig.IsIssuance() {
-		prog := orig.IssuanceProgram()
-		in.Type = "issue"
-		in.IssuanceProgram = prog
-	} else {
-		prevoutID := orig.SpentOutputID()
-		in.Type = "spend"
-		in.ControlProgram = orig.ControlProgram()
-		in.SpentOutputID = &prevoutID
+	// xxx how to populate in.ReferenceData? the blockchain no longer stores bare refdata, only its hash
 
-		outpoint, ok := outpoints[prevoutID]
-		if ok {
-			in.SpentOutput = &SpentOutput{
-				TransactionID: outpoint.Hash,
-				Position:      outpoint.Index,
-			}
-		}
-
-	}
 	return in
 }
 
