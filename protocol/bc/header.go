@@ -184,6 +184,36 @@ func (h *Header) writeTx(w io.Writer) error {
 // readTx reads the output of writeTx and populates entry pointers in
 // the Header and the entries reachable from it.
 func (h *Header) readTx(r io.Reader) error {
-	// xxx
-	return nil
+	err := deserialize(r, &h.body)
+	if err != nil {
+		return err
+	}
+	// xxx also deserialize into h.witness, eventually
+	n, _, err := blockchain.ReadVarint31(r)
+	if err != nil {
+		return err
+	}
+	entries := make(map[Hash]*EntryRef, n)
+	for i := uint32(0); i < n; i++ {
+		var ref EntryRef
+		err = ref.readEntry(r)
+		if err != nil {
+			return err
+		}
+		hash, err := ref.Hash()
+		if err != nil {
+			return err
+		}
+		entries[hash] = &ref
+	}
+	return h.Walk(func(e *EntryRef) error {
+		hash, err := e.Hash()
+		if err != nil {
+			return err
+		}
+		if other, ok := entries[hash]; ok {
+			e.Entry = other.Entry
+		}
+		return nil
+	})
 }
