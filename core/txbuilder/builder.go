@@ -36,7 +36,7 @@ func (b *TemplateBuilder) AddSpend(spentOutput *bc.EntryRef, value bc.AssetAmoun
 	return nil
 }
 
-func (b *TemplateBuilder) AddIssuance(nonce *bc.EntryRef, value AssetAmount, data *bc.EntryRef, sigInstruction *SigningInstruction) error {
+func (b *TemplateBuilder) AddIssuance(nonce *bc.EntryRef, value bc.AssetAmount, data *bc.EntryRef, sigInstruction *SigningInstruction) error {
 	if value.Amount > math.MaxInt64 {
 		return errors.WithDetailf(ErrBadAmount, "amount %d exceeds maximum value 2^63", in.Amount())
 	}
@@ -45,7 +45,7 @@ func (b *TemplateBuilder) AddIssuance(nonce *bc.EntryRef, value AssetAmount, dat
 	return nil
 }
 
-func (b *TemplateBuilder) AddOutput(value AssetAmount, controlProg Program, data *bc.EntryRef) error {
+func (b *TemplateBuilder) AddOutput(value bc.AssetAmount, controlProg bc.Program, data *bc.EntryRef) error {
 	if value.Amount > math.MaxInt64 {
 		return errors.WithDetailf(ErrBadAmount, "amount %d exceeds maximum value 2^63", value.Amount)
 	}

@@ -23,8 +23,8 @@ type Data struct {
 
 const typeData = "data1"
 
-func (Data) Type() string         { return typeData }
-func (d *Data) Body() interface{} { return d.body }
+func (Data) Type() string            { return typeData }
+func (d *Data) Body() interface{}    { return d.body }
 func (d *Data) Witness() interface{} { return nil }
 
 func NewData(hash Hash) *Data {
@@ -40,7 +40,7 @@ func refDataHash(e *EntryRef) Hash {
 	if e == nil || e.Entry == nil {
 		return EmptyStringHash
 	}
-	return e.Entry.(*data).body
+	return e.Entry.(*Data).body
 }
 
 func HashData(data []byte) (h Hash) {

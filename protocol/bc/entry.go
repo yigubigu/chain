@@ -67,7 +67,7 @@ func (ref *EntryRef) readEntry(r io.Reader) error {
 	}
 	switch string(typ) {
 	case typeData:
-		ref.Entry = new(data)
+		ref.Entry = new(Data)
 	case typeHeader:
 		ref.Entry = new(Header)
 	case typeIssuance:
