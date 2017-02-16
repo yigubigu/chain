@@ -10,35 +10,47 @@ import (
 )
 
 func NewBuilder(maxTime time.Time) *TemplateBuilder {
-	return &TemplateBuilder{maxTime: maxTime}
+	return &TemplateBuilder{
+		bcBuilder: bc.NewBuilder(1, bc.Millis(time.Now()), bc.Millis(maxTime)),
+	}
 }
 
 type TemplateBuilder struct {
 	base                *bc.TxData
-	inputs              []*bc.TxInput
-	outputs             []*bc.TxOutput
+	bcBuilder           *bc.Builder
 	signingInstructions []*SigningInstruction
-	minTime             time.Time
-	maxTime             time.Time
-	referenceData       []byte
 	rollbacks           []func()
 	callbacks           []func() error
 }
 
-func (b *TemplateBuilder) AddInput(in *bc.TxInput, sigInstruction *SigningInstruction) error {
-	if in.Amount() > math.MaxInt64 {
+func (b *TemplateBuilder) AddSpend(spentOutput *EntryRef, value bc.AssetAmount, data *EntryRef, sigInstruction *SigningInstruction) error {
+	if value.Amount > math.MaxInt64 {
 		return errors.WithDetailf(ErrBadAmount, "amount %d exceeds maximum value 2^63", in.Amount())
 	}
-	b.inputs = append(b.inputs, in)
+	if prevout, ok := spentOutput.Entry.(*Output); ok {
+		if value.AssetID != prevout.AssetID() || value.Amount != prevout.Amount() {
+			return errors.WithDetailf(ErrBadAmount, "amount %d of asset %x does not match the output being spent", value.Amount, value.AssetID[:])
+		}
+	}
+	b.bcBuilder.AddSpend(spentOutput, value, data)
 	b.signingInstructions = append(b.signingInstructions, sigInstruction)
 	return nil
 }
 
-func (b *TemplateBuilder) AddOutput(o *bc.TxOutput) error {
-	if o.Amount > math.MaxInt64 {
-		return errors.WithDetailf(ErrBadAmount, "amount %d exceeds maximum value 2^63", o.Amount)
+func (b *TemplateBuilder) AddIssuance(nonce *EntryRef, value AssetAmount, data *EntryRef, sigInstruction *SigningInstruction) error {
+	if value.Amount > math.MaxInt64 {
+		return errors.WithDetailf(ErrBadAmount, "amount %d exceeds maximum value 2^63", in.Amount())
 	}
-	b.outputs = append(b.outputs, o)
+	b.bcBuilder.AddIssuance(nonce, value, data)
+	b.signingInstructions = append(b.signingInstructions, sigInstruction)
+	return nil
+}
+
+func (b *TemplateBuilder) AddOutput(value AssetAmount, controlProg Program, data *EntryRef) error {
+	if value.Amount > math.MaxInt64 {
+		return errors.WithDetailf(ErrBadAmount, "amount %d exceeds maximum value 2^63", value.Amount)
+	}
+	b.bcBuilder.AddOutput(value, controlProg, data)
 	return nil
 }
 
