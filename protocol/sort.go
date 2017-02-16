@@ -2,28 +2,30 @@ package protocol
 
 import "chain/protocol/bc"
 
-func topSort(txs []*bc.Tx) []*bc.Tx {
+func topSort(txs []*bc.EntryRef) []*bc.EntryRef {
 	if len(txs) == 1 {
 		return txs
 	}
 
-	nodes := make(map[bc.Hash]*bc.Tx)
+	nodes := make(map[bc.Hash]*bc.EntryRef)
 	for _, tx := range txs {
-		nodes[tx.ID] = tx
+		hash, _ := tx.Hash() // xxx ignoring errors
+		nodes[hash] = tx
 	}
 
 	incomingEdges := make(map[bc.Hash]int)
 	children := make(map[bc.Hash][]bc.Hash)
 	for node, tx := range nodes {
-		for _, in := range tx.Inputs {
-			if in.IsIssuance() {
-				continue
-			}
-			if prev := in.SpentOutputID().Hash; nodes[prev] != nil {
-				if children[prev] == nil {
-					children[prev] = make([]bc.Hash, 0, 1)
+		hdr := tx.Entry.(*bc.Header)
+		spends, _ := hdr.Inputs()
+		for _, spRef := range spends {
+			sp := spRef.Entry.(*bc.Spend)
+			spentOutputID, _ := sp.SpentOutput().Hash() // xxx ignoring error
+			if nodes[spentOutputID] != nil {
+				if children[spentOutputID] == nil {
+					children[spentOutputID] = make([]bc.Hash, 0, 1)
 				}
-				children[prev] = append(children[prev], node)
+				children[spentOutputID] = append(children[spentOutputID], node)
 				incomingEdges[node]++
 			}
 		}
@@ -37,7 +39,7 @@ func topSort(txs []*bc.Tx) []*bc.Tx {
 	}
 
 	// https://en.wikipedia.org/wiki/Topological_sorting#Algorithms
-	var l []*bc.Tx
+	var l []*bc.EntryRef
 	for len(s) > 0 {
 		n := s[0]
 		s = s[1:]
@@ -59,23 +61,25 @@ func topSort(txs []*bc.Tx) []*bc.Tx {
 	return l
 }
 
-func isTopSorted(txs []*bc.Tx) bool {
+func isTopSorted(txs []*bc.EntryRef) bool {
 	exists := make(map[bc.Hash]bool)
 	seen := make(map[bc.Hash]bool)
 	for _, tx := range txs {
-		exists[tx.ID] = true
+		hash, _ := tx.Hash() // xxx ignoring errors
+		exists[hash] = true
 	}
 	for _, tx := range txs {
-		for _, in := range tx.Inputs {
-			if in.IsIssuance() {
-				continue
-			}
-			h := in.SpentOutputID().Hash
-			if exists[h] && !seen[h] {
+		hdr := tx.Entry.(*bc.Header)
+		spends, _ := hdr.Inputs()
+		for _, spRef := range spends {
+			sp := spRef.Entry.(*bc.Spend)
+			spentOutputID, _ := sp.SpentOutput().Hash() // xxx ignoring errors
+			if exists[spentOutputID] && !seen[spentOutputID] {
 				return false
 			}
 		}
-		seen[tx.ID] = true
+		hash, _ := tx.Hash()
+		seen[hash] = true
 	}
 	return true
 }
