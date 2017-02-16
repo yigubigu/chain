@@ -21,116 +21,123 @@ type (
 		m           *mux
 		outputs     []*pendingOutput
 		retirements []*pendingRetirement
-		entries     map[Hash]Entry
 	}
 )
 
-func NewBuilder(version, minTimeMS, maxTimeMS uint64) *Builder {
-	return &Builder{
-		h:       newHeader(version, nil, nil, minTimeMS, maxTimeMS),
-		m:       newMux(nil),
-		entries: make(map[Hash]Entry),
+func NewBuilder(version, minTimeMS, maxTimeMS uint64, base *EntryRef) *Builder {
+	result := &Builder{
+		h: newHeader(version, nil, nil, minTimeMS, maxTimeMS),
+		m: newMux(nil),
 	}
+	if base != nil {
+		baseHdr := base.Entry.(*Header)
+		entriesByHash := make(map[Hash]*EntryRef)
+		var (
+			spends, issuances, outputs, retirements []*EntryRef
+		)
+		baseHdr.Walk(func(e *EntryRef) error {
+			h, err := e.Hash()
+			if err != nil {
+				return err
+			}
+			entriesByHash[h] = e
+			switch e.Type() {
+			case typeSpend:
+				spends = append(spends, e)
+			case typeIssuance:
+				issuances = append(issuances, e)
+			case typeOutput:
+				outputs = append(outputs, e)
+			case typeRetirement:
+				retirements = append(retirements, e)
+			}
+			return nil
+		})
+		for _, e := range spends {
+			sp := e.Entry.(*Spend)
+			spentOutputRef := sp.SpentOutput()
+			spentOutput := spentOutputRef.Entry.(*Output)
+			result.AddSpend(spentOutputRef, AssetAmount{AssetID: spentOutput.AssetID(), Amount: spentOutput.Amount()}, sp.Data())
+		}
+		for _, e := range issuances {
+			iss := e.Entry.(*Issuance)
+			result.AddIssuance(iss.Anchor(), AssetAmount{AssetID: iss.AssetID(), Amount: iss.Amount()}, iss.Data())
+		}
+		for _, e := range outputs {
+			o := e.Entry.(*Output)
+			result.AddOutput(AssetAmount{AssetID: o.AssetID(), Amount: o.Amount()}, o.ControlProgram(), o.Data())
+		}
+		for _, e := range retirements {
+			r := e.Entry.(*Retirement)
+			result.AddRetirement(AssetAmount{AssetID: r.AssetID(), Amount: r.Amount()}, r.Data())
+		}
+	}
+	return result
 }
 
-func (b *Builder) AddData(h Hash) (*Builder, *data, Hash) {
-	d := newData(h)
-	dID := mustEntryID(d)
-	// xxx b.h.body.Data = dID?
-	b.entries[dID] = d
-	return b, d, dID
-}
-
-func (b *Builder) AddIssuance(nonce *EntryRef, value AssetAmount, data *EntryRef) (*Builder, *EntryRef) {
-	iss := newIssuance(nonce, value, data)
-	issID := mustEntryID(iss)
+func (b *Builder) AddIssuance(nonce *EntryRef, value AssetAmount, data *EntryRef) *EntryRef {
+	issRef := &EntryRef{Entry: newIssuance(nonce, value, data)}
 	s := valueSource{
-		Ref:   &EntryRef{Entry: iss, ID: &issID},
+		Ref:   issRef,
 		Value: value,
 	}
 	b.m.body.Sources = append(b.m.body.Sources, s)
-	b.entries[issID] = iss
-	return b, &EntryRef{Entry: iss, ID: &issID}
+	return issRef
 }
 
-func (b *Builder) AddNonce(p Program, timeRange *EntryRef) (*Builder, *EntryRef) {
-	n := newNonce(p, timeRange)
-	nID := mustEntryID(n)
-	b.entries[nID] = n
-	return b, &EntryRef{Entry: n, ID: &nID}
-}
-
-// AddOutput returns only the builder, unlike most other Add
+// AddOutput does not return an entry, unlike other Add
 // functions, since output objects aren't created until Build
-func (b *Builder) AddOutput(value AssetAmount, controlProg Program, data *EntryRef) *Builder {
+func (b *Builder) AddOutput(value AssetAmount, controlProg Program, data *EntryRef) {
 	b.outputs = append(b.outputs, &pendingOutput{
 		value:       value,
 		controlProg: controlProg,
 		data:        data,
 	})
-	return b
 }
 
-// AddRetirement returns only the builder, unlike most other Add
+// AddRetirement does not return an entry, unlike most other Add
 // functions, since retirement objects aren't created until Build
-func (b *Builder) AddRetirement(value AssetAmount, data *EntryRef) *Builder {
+func (b *Builder) AddRetirement(value AssetAmount, data *EntryRef) {
 	b.retirements = append(b.retirements, &pendingRetirement{
 		value: value,
 		data:  data,
 	})
-	return b
 }
 
-func (b *Builder) AddSpend(spentOutput *EntryRef, value AssetAmount, data *EntryRef) (*Builder, *EntryRef) {
-	sp := newSpend(spentOutput, data)
-	spID := mustEntryID(sp)
+func (b *Builder) AddSpend(spentOutput *EntryRef, value AssetAmount, data *EntryRef) *EntryRef {
+	spRef := &EntryRef{Entry: newSpend(spentOutput, data)}
 	src := valueSource{
-		Ref:   &EntryRef{Entry: sp, ID: &spID},
+		Ref:   spRef,
 		Value: value,
 	}
 	b.m.body.Sources = append(b.m.body.Sources, src)
-	b.entries[spID] = sp
-	return b, &EntryRef{Entry: sp, ID: &spID}
+	return spRef
 }
 
-func (b *Builder) AddTimeRange(minTimeMS, maxTimeMS uint64) (*Builder, *EntryRef) {
-	tr := newTimeRange(minTimeMS, maxTimeMS)
-	trID := mustEntryID(tr)
-	b.entries[trID] = tr
-	return b, &EntryRef{Entry: tr, ID: &trID}
-}
-
-func (b *Builder) Build() (Hash, *Header, map[Hash]Entry) {
-	muxID := mustEntryID(b.m)
-	b.entries[muxID] = b.m
+func (b *Builder) Build() *Header {
 	var n uint64
+	muxRef := &EntryRef{Entry: b.m}
 	for _, po := range b.outputs {
 		s := valueSource{
-			Ref:      &EntryRef{Entry: b.m, ID: &muxID},
+			Ref:      muxRef,
 			Value:    po.value,
 			Position: n,
 		}
 		n++
 		o := newOutput(s, po.controlProg, po.data)
-		oID := mustEntryID(o)
-		b.entries[oID] = o
-		b.h.body.Results = append(b.h.body.Results, &EntryRef{Entry: o, ID: &oID})
+		b.h.body.Results = append(b.h.body.Results, &EntryRef{Entry: o})
 	}
 	for _, pr := range b.retirements {
 		s := valueSource{
-			Ref:      &EntryRef{Entry: b.m, ID: &muxID},
+			Ref:      muxRef,
 			Value:    pr.value,
 			Position: n,
 		}
 		n++
 		r := newRetirement(s, pr.data)
-		rID := mustEntryID(r)
-		b.entries[rID] = r
-		b.h.body.Results = append(b.h.body.Results, &EntryRef{Entry: r, ID: &rID})
+		b.h.body.Results = append(b.h.body.Results, &EntryRef{Entry: r})
 	}
-	hID := mustEntryID(b.h)
-	b.entries[hID] = b.h
-	return hID, b.h, b.entries
+	return b.h
 }
 
 func mustEntryID(e Entry) Hash {

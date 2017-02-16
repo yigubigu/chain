@@ -35,6 +35,10 @@ func (iss *Issuance) Anchor() *EntryRef {
 	return iss.body.Anchor
 }
 
+func (iss *Issuance) Data() *EntryRef {
+	return iss.body.Data
+}
+
 func (iss *Issuance) RefDataHash() Hash {
 	return refDataHash(iss.body.Data)
 }

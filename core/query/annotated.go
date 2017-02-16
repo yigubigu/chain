@@ -190,7 +190,7 @@ func buildAnnotatedIssuance(orig *bc.EntryRef) *AnnotatedInput {
 	return in
 }
 
-func buildAnnotatedOutput(tx *bc.Tx, idx uint32) *AnnotatedOutput {
+func buildAnnotatedOutput(tx *bc.EntryRef, idx uint32) *AnnotatedOutput {
 	orig := tx.Outputs[idx]
 	outid := tx.OutputID(idx)
 	out := &AnnotatedOutput{

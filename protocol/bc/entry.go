@@ -25,15 +25,12 @@ type (
 		Entry
 		ID *Hash
 	}
-
-	hasher interface {
-		Hash() (Hash, error)
-	}
 )
 
 // Hash returns the EntryRef's cached entry ID, computing it first if
 // necessary. Satisfies the hasher interface.
 func (r *EntryRef) Hash() (Hash, error) {
+	// xxx do we need to protect against concurrent calls to Hash()?
 	if r.ID == nil {
 		if r.Entry == nil {
 			return Hash{}, nil

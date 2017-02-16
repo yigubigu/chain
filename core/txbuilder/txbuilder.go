@@ -28,11 +28,8 @@ var (
 // Build partners then satisfy and consume inputs and destinations.
 // The final party must ensure that the transaction is
 // balanced before calling finalize.
-func Build(ctx context.Context, tx *bc.TxData, actions []Action, maxTime time.Time) (*Template, error) {
-	builder := TemplateBuilder{
-		base:    tx,
-		maxTime: maxTime,
-	}
+func Build(ctx context.Context, tx *bc.EntryRef, actions []Action, maxTime time.Time) (*Template, error) {
+	builder := NewBuilder(maxTime, tx)
 
 	// Build all of the actions, updating the builder.
 	var errs []error

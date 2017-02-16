@@ -23,6 +23,10 @@ func (s *Spend) SpentOutput() *EntryRef {
 	return s.body.SpentOutput
 }
 
+func (s *Spend) Data() *EntryRef {
+	return s.body.Data
+}
+
 func (s *Spend) RefDataHash() Hash {
 	return refDataHash(s.body.Data)
 }

@@ -12,7 +12,7 @@ import (
 
 // Template represents a partially- or fully-signed transaction.
 type Template struct {
-	Transaction         *bc.Tx                `json:"raw_transaction"`
+	Transaction         *bc.EntryRef          `json:"raw_transaction"` // xxx need a tx type that json-encodes to the transitive collection of entries
 	SigningInstructions []*SigningInstruction `json:"signing_instructions"`
 
 	// Local indicates that all inputs to the transaction are signed

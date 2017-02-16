@@ -9,21 +9,20 @@ import (
 	"chain/protocol/bc"
 )
 
-func NewBuilder(maxTime time.Time) *TemplateBuilder {
+func NewBuilder(maxTime time.Time, tx *bc.EntryRef) *TemplateBuilder {
 	return &TemplateBuilder{
-		bcBuilder: bc.NewBuilder(1, bc.Millis(time.Now()), bc.Millis(maxTime)),
+		bcBuilder: bc.NewBuilder(1, bc.Millis(time.Now()), bc.Millis(maxTime), tx),
 	}
 }
 
 type TemplateBuilder struct {
-	base                *bc.TxData
 	bcBuilder           *bc.Builder
 	signingInstructions []*SigningInstruction
 	rollbacks           []func()
 	callbacks           []func() error
 }
 
-func (b *TemplateBuilder) AddSpend(spentOutput *EntryRef, value bc.AssetAmount, data *EntryRef, sigInstruction *SigningInstruction) error {
+func (b *TemplateBuilder) AddSpend(spentOutput *bc.EntryRef, value bc.AssetAmount, data *bc.EntryRef, sigInstruction *SigningInstruction) error {
 	if value.Amount > math.MaxInt64 {
 		return errors.WithDetailf(ErrBadAmount, "amount %d exceeds maximum value 2^63", in.Amount())
 	}
@@ -37,7 +36,7 @@ func (b *TemplateBuilder) AddSpend(spentOutput *EntryRef, value bc.AssetAmount, 
 	return nil
 }
 
-func (b *TemplateBuilder) AddIssuance(nonce *EntryRef, value AssetAmount, data *EntryRef, sigInstruction *SigningInstruction) error {
+func (b *TemplateBuilder) AddIssuance(nonce *bc.EntryRef, value AssetAmount, data *bc.EntryRef, sigInstruction *SigningInstruction) error {
 	if value.Amount > math.MaxInt64 {
 		return errors.WithDetailf(ErrBadAmount, "amount %d exceeds maximum value 2^63", in.Amount())
 	}
@@ -46,7 +45,7 @@ func (b *TemplateBuilder) AddIssuance(nonce *EntryRef, value AssetAmount, data *
 	return nil
 }
 
-func (b *TemplateBuilder) AddOutput(value AssetAmount, controlProg Program, data *EntryRef) error {
+func (b *TemplateBuilder) AddOutput(value AssetAmount, controlProg Program, data *bc.EntryRef) error {
 	if value.Amount > math.MaxInt64 {
 		return errors.WithDetailf(ErrBadAmount, "amount %d exceeds maximum value 2^63", value.Amount)
 	}
@@ -88,9 +87,10 @@ func (b *TemplateBuilder) OnBuild(buildFn func() error) {
 }
 
 func (b *TemplateBuilder) setReferenceData(data []byte) error {
-	if b.base != nil && len(b.base.ReferenceData) != 0 && !bytes.Equal(b.base.ReferenceData, data) {
-		return errors.Wrap(ErrBadRefData)
-	}
+	// if b.base != nil && len(b.base.ReferenceData) != 0 && !bytes.Equal(b.base.ReferenceData, data) {
+	// 	return errors.Wrap(ErrBadRefData)
+	// }
+	// xxx update the following
 	if len(b.referenceData) != 0 && !bytes.Equal(b.referenceData, data) {
 		return errors.Wrap(ErrBadRefData)
 	}

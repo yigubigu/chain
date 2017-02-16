@@ -27,6 +27,10 @@ func (o *Output) ControlProgram() Program {
 	return o.body.ControlProgram
 }
 
+func (o *Output) Data() *EntryRef {
+	return o.body.Data
+}
+
 func (o *Output) RefDataHash() Hash {
 	return refDataHash(o.body.Data)
 }
