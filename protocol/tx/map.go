@@ -25,7 +25,7 @@ func mapTx(tx *bc.TxData) (headerID bc.Hash, hdr *Header, entryMap map[bc.Hash]E
 	}
 
 	if len(tx.ReferenceData) > 0 {
-		dataRef, _, err = addEntry(newData(hashData(tx.ReferenceData)))
+		dataRef, _, err = addEntry(NewData(HashData(tx.ReferenceData)))
 		if err != nil {
 			err = errors.Wrap(err, "adding refdata entry")
 			return
@@ -43,7 +43,7 @@ func mapTx(tx *bc.TxData) (headerID bc.Hash, hdr *Header, entryMap map[bc.Hash]E
 		if oldSp, ok := inp.TypedInput.(*bc.SpendInput); ok {
 			var inpDataRef bc.Hash
 			if len(inp.ReferenceData) != 0 {
-				inpDataRef, _, err = addEntry(newData(hashData(inp.ReferenceData)))
+				inpDataRef, _, err = addEntry(NewData(HashData(inp.ReferenceData)))
 				if err != nil {
 					return
 				}
@@ -68,7 +68,7 @@ func mapTx(tx *bc.TxData) (headerID bc.Hash, hdr *Header, entryMap map[bc.Hash]E
 		if oldIss, ok := inp.TypedInput.(*bc.IssuanceInput); ok {
 			var inpDataRef bc.Hash
 			if len(inp.ReferenceData) != 0 {
-				inpDataRef, _, err = addEntry(newData(hashData(inp.ReferenceData)))
+				inpDataRef, _, err = addEntry(NewData(HashData(inp.ReferenceData)))
 				if err != nil {
 					err = errors.Wrapf(err, "adding input refdata entry for input %d", i)
 					return
@@ -139,7 +139,7 @@ func mapTx(tx *bc.TxData) (headerID bc.Hash, hdr *Header, entryMap map[bc.Hash]E
 
 		var outDataRef bc.Hash
 		if len(out.ReferenceData) > 0 {
-			outDataRef, _, err = addEntry(newData(hashData(out.ReferenceData)))
+			outDataRef, _, err = addEntry(NewData(HashData(out.ReferenceData)))
 			if err != nil {
 				err = errors.Wrapf(err, "adding refdata entry for output %d", i)
 				return
@@ -177,8 +177,8 @@ func mapTx(tx *bc.TxData) (headerID bc.Hash, hdr *Header, entryMap map[bc.Hash]E
 	return headerID, h.(*Header), entryMap, nil
 }
 
-func mapBlockHeader(old *bc.BlockHeader) (bhID entryRef, bh *blockHeader, err error) {
-	bh = newBlockHeader(old.Version, old.Height, entryRef(old.PreviousBlockHash), old.TimestampMS, old.TransactionsMerkleRoot, old.AssetsMerkleRoot, old.ConsensusProgram)
+func mapBlockHeader(old *bc.BlockHeader) (bhID bc.Hash, bh *blockHeader, err error) {
+	bh = newBlockHeader(old.Version, old.Height, old.PreviousBlockHash, old.TimestampMS, old.TransactionsMerkleRoot, old.AssetsMerkleRoot, old.ConsensusProgram)
 	bhID, err = entryID(bh)
 	return
 }

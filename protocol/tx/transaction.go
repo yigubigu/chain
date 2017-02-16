@@ -44,7 +44,7 @@ func TxHashes(oldTx *bc.TxData) (hashes *bc.TxHashes, err error) {
 		if !ok {
 			return nil, fmt.Errorf("header refers to nonexistent data entry")
 		}
-		d, ok := dEntry.(*data)
+		d, ok := dEntry.(*Data)
 		if !ok {
 			return nil, fmt.Errorf("header refers to %s entry, should be data", dEntry.Type())
 		}
@@ -58,7 +58,7 @@ func TxHashes(oldTx *bc.TxData) (hashes *bc.TxHashes, err error) {
 		if !ok {
 			return bc.EmptyStringHash, nil
 		}
-		d, ok := dEntry.(*data)
+		d, ok := dEntry.(*Data)
 		if !ok {
 			return bc.Hash{}, fmt.Errorf("unexpected type %T for entry %x", dEntry, id[:])
 		}

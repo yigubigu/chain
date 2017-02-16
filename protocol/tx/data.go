@@ -20,22 +20,22 @@ import (
 //
 // Note that the body of this entry is a hash (of the underlying data);
 // when a Data entry is hashed, its body_hash is a hash of that hash.
-type data struct {
+type Data struct {
 	body bc.Hash
 }
 
-func (data) Type() string         { return "data1" }
-func (d *data) Body() interface{} { return d.body }
+func (Data) Type() string         { return "data1" }
+func (d *Data) Body() interface{} { return d.body }
 
-func (data) Ordinal() int { return -1 }
+func (Data) Ordinal() int { return -1 }
 
-func newData(hash bc.Hash) *data {
-	d := new(data)
+func NewData(hash bc.Hash) *Data {
+	d := new(Data)
 	d.body = hash
 	return d
 }
 
-func hashData(data []byte) (h bc.Hash) {
+func HashData(data []byte) (h bc.Hash) {
 	sha3pool.Sum256(h[:], data)
 	return
 }
