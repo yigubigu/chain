@@ -16,7 +16,7 @@ type (
 		TxRefDataHash Hash
 		RefDataHash   Hash
 		TxSigHash     Hash
-		OutputID      *OutputID
+		OutputID      *Hash
 		EntryID       Hash
 		NonceID       *Hash
 	}

@@ -34,7 +34,7 @@ type AnnotatedInput struct {
 	Amount          uint64             `json:"amount"`
 	IssuanceProgram chainjson.HexBytes `json:"issuance_program,omitempty"`
 	ControlProgram  chainjson.HexBytes `json:"control_program,omitempty"`
-	SpentOutputID   *bc.OutputID       `json:"spent_output_id,omitempty"`
+	SpentOutputID   *bc.Hash           `json:"spent_output_id,omitempty"`
 	SpentOutput     *SpentOutput       `json:"spent_output,omitempty"`
 	AccountID       string             `json:"account_id,omitempty"`
 	AccountAlias    string             `json:"account_alias,omitempty"`
@@ -46,7 +46,7 @@ type AnnotatedInput struct {
 type AnnotatedOutput struct {
 	Type            string             `json:"type"`
 	Purpose         string             `json:"purpose,omitempty"`
-	OutputID        bc.OutputID        `json:"id"`
+	OutputID        bc.Hash            `json:"id"`
 	TransactionID   bc.Hash            `json:"transaction_id,omitempty"`
 	Position        uint32             `json:"position"`
 	AssetID         bc.AssetID         `json:"asset_id"`

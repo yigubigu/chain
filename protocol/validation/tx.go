@@ -115,7 +115,7 @@ func ConfirmTx(snapshot *state.Snapshot, initialBlockHash bc.Hash, block *bc.Blo
 		if err != nil {
 			return err
 		}
-		k, val := state.OutputTreeItem(bc.OutputID{spentOutputID})
+		k, val := state.OutputTreeItem(spentOutputID)
 		if !snapshot.Tree.Contains(k, val) {
 			inputID, _ := spRef.Hash()
 			return badTxErrf(errInvalidOutput, "output %x for spend input %x is invalid", spentOutputID[:], inputID[:])
@@ -317,7 +317,7 @@ func ApplyTx(snapshot *state.Snapshot, hdrRef *bc.EntryRef) error {
 			if err != nil {
 				return err
 			}
-			err = snapshot.Tree.Insert(state.OutputTreeItem(bc.OutputID{outputID}))
+			err = snapshot.Tree.Insert(state.OutputTreeItem(outputID))
 			if err != nil {
 				return err
 			}
