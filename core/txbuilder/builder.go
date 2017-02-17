@@ -11,37 +11,46 @@ import (
 
 func NewBuilder(maxTime time.Time, tx *bc.EntryRef) *TemplateBuilder {
 	return &TemplateBuilder{
-		bcBuilder: bc.NewBuilder(1, bc.Millis(time.Now()), bc.Millis(maxTime), tx),
+		bcBuilder:           bc.NewBuilder(1, bc.Millis(time.Now()), bc.Millis(maxTime), tx),
+		signingInstructions: make(map[bc.Hash]*SigningInstruction),
 	}
 }
 
 type TemplateBuilder struct {
 	bcBuilder           *bc.Builder
-	signingInstructions []*SigningInstruction
+	signingInstructions map[bc.Hash]*SigningInstruction
 	rollbacks           []func()
 	callbacks           []func() error
 }
 
 func (b *TemplateBuilder) AddSpend(spentOutput *bc.EntryRef, value bc.AssetAmount, data *bc.EntryRef, sigInstruction *SigningInstruction) error {
 	if value.Amount > math.MaxInt64 {
-		return errors.WithDetailf(ErrBadAmount, "amount %d exceeds maximum value 2^63", in.Amount())
+		return errors.WithDetailf(ErrBadAmount, "amount %d exceeds maximum value 2^63", value.Amount)
 	}
-	if prevout, ok := spentOutput.Entry.(*Output); ok {
+	if prevout, ok := spentOutput.Entry.(*bc.Output); ok {
 		if value.AssetID != prevout.AssetID() || value.Amount != prevout.Amount() {
 			return errors.WithDetailf(ErrBadAmount, "amount %d of asset %x does not match the output being spent", value.Amount, value.AssetID[:])
 		}
 	}
-	b.bcBuilder.AddSpend(spentOutput, value, data)
-	b.signingInstructions = append(b.signingInstructions, sigInstruction)
+	spRef := b.bcBuilder.AddSpend(spentOutput, value, data)
+	hash, err := spRef.Hash()
+	if err != nil {
+		return err
+	}
+	b.signingInstructions[hash] = sigInstruction
 	return nil
 }
 
 func (b *TemplateBuilder) AddIssuance(nonce *bc.EntryRef, value bc.AssetAmount, data *bc.EntryRef, sigInstruction *SigningInstruction) error {
 	if value.Amount > math.MaxInt64 {
-		return errors.WithDetailf(ErrBadAmount, "amount %d exceeds maximum value 2^63", in.Amount())
+		return errors.WithDetailf(ErrBadAmount, "amount %d exceeds maximum value 2^63", value.Amount)
 	}
-	b.bcBuilder.AddIssuance(nonce, value, data)
-	b.signingInstructions = append(b.signingInstructions, sigInstruction)
+	issRef := b.bcBuilder.AddIssuance(nonce, value, data)
+	hash, err := issRef.Hash()
+	if err != nil {
+		return err
+	}
+	b.signingInstructions[hash] = sigInstruction
 	return nil
 }
 
@@ -50,6 +59,14 @@ func (b *TemplateBuilder) AddOutput(value bc.AssetAmount, controlProg bc.Program
 		return errors.WithDetailf(ErrBadAmount, "amount %d exceeds maximum value 2^63", value.Amount)
 	}
 	b.bcBuilder.AddOutput(value, controlProg, data)
+	return nil
+}
+
+func (b *TemplateBuilder) AddRetirement(value bc.AssetAmount, data *bc.EntryRef) error {
+	if value.Amount > math.MaxInt64 {
+		return errors.WithDetailf(ErrBadAmount, "amount %d exceeds maximum value 2^63", value.Amount)
+	}
+	b.bcBuilder.AddRetirement(value, data)
 	return nil
 }
 
