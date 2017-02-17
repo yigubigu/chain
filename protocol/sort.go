@@ -9,8 +9,7 @@ func topSort(txs []*bc.EntryRef) []*bc.EntryRef {
 
 	nodes := make(map[bc.Hash]*bc.EntryRef)
 	for _, tx := range txs {
-		hash, _ := tx.Hash() // xxx ignoring errors
-		nodes[hash] = tx
+		nodes[tx.Hash()] = tx
 	}
 
 	incomingEdges := make(map[bc.Hash]int)
@@ -20,7 +19,7 @@ func topSort(txs []*bc.EntryRef) []*bc.EntryRef {
 		spends, _ := hdr.Inputs()
 		for _, spRef := range spends {
 			sp := spRef.Entry.(*bc.Spend)
-			spentOutputID, _ := sp.SpentOutput().Hash() // xxx ignoring error
+			spentOutputID := sp.SpentOutput().Hash()
 			if nodes[spentOutputID] != nil {
 				if children[spentOutputID] == nil {
 					children[spentOutputID] = make([]bc.Hash, 0, 1)
@@ -65,21 +64,19 @@ func isTopSorted(txs []*bc.EntryRef) bool {
 	exists := make(map[bc.Hash]bool)
 	seen := make(map[bc.Hash]bool)
 	for _, tx := range txs {
-		hash, _ := tx.Hash() // xxx ignoring errors
-		exists[hash] = true
+		exists[tx.Hash()] = true
 	}
 	for _, tx := range txs {
 		hdr := tx.Entry.(*bc.Header)
 		spends, _ := hdr.Inputs()
 		for _, spRef := range spends {
 			sp := spRef.Entry.(*bc.Spend)
-			spentOutputID, _ := sp.SpentOutput().Hash() // xxx ignoring errors
+			spentOutputID := sp.SpentOutput().Hash() // xxx ignoring errors
 			if exists[spentOutputID] && !seen[spentOutputID] {
 				return false
 			}
 		}
-		hash, _ := tx.Hash()
-		seen[hash] = true
+		seen[tx.Hash()] = true
 	}
 	return true
 }

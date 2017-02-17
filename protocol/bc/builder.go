@@ -36,11 +36,7 @@ func NewBuilder(version, minTimeMS, maxTimeMS uint64, base *EntryRef) *Builder {
 			spends, issuances, outputs, retirements []*EntryRef
 		)
 		baseHdr.Walk(func(e *EntryRef) error {
-			h, err := e.Hash()
-			if err != nil {
-				return err
-			}
-			entriesByHash[h] = e
+			entriesByHash[e.Hash()] = e
 			switch e.Type() {
 			case typeSpend:
 				spends = append(spends, e)
@@ -138,12 +134,4 @@ func (b *Builder) Build() *Header {
 		b.h.body.Results = append(b.h.body.Results, &EntryRef{Entry: r})
 	}
 	return b.h
-}
-
-func mustEntryID(e Entry) Hash {
-	res, err := entryID(e)
-	if err != nil {
-		panic(err)
-	}
-	return res
 }

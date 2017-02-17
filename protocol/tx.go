@@ -14,10 +14,7 @@ import (
 // before attempting to perform a context-free validation of the tx.
 func (c *Chain) ValidateTxCached(hdrRef *bc.EntryRef) error {
 	// Consult a cache of prevalidated transactions.
-	hash, err := hdrRef.Hash()
-	if err != nil {
-		return err
-	}
+	hash := hdrRef.Hash()
 	err, ok := c.prevalidated.lookup(hash)
 	if ok {
 		return err

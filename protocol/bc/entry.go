@@ -29,19 +29,13 @@ type (
 
 // Hash returns the EntryRef's cached entry ID, computing it first if
 // necessary. Satisfies the hasher interface.
-func (r *EntryRef) Hash() (Hash, error) {
+func (r *EntryRef) Hash() Hash {
 	// xxx do we need to protect against concurrent calls to Hash()?
 	if r.ID == nil {
-		if r.Entry == nil {
-			return Hash{}, nil
-		}
-		h, err := entryID(r.Entry)
-		if err != nil {
-			return Hash{}, err
-		}
+		h := entryID(r.Entry)
 		r.ID = &h
 	}
-	return *r.ID, nil
+	return *r.ID
 }
 
 func (r EntryRef) IsNil() bool {
@@ -98,7 +92,7 @@ func (ref *EntryRef) readEntry(r io.Reader) error {
 
 var errInvalidValue = errors.New("invalid value")
 
-func entryID(e Entry) (Hash, error) {
+func entryID(e Entry) Hash {
 	h := sha3pool.Get256()
 	defer sha3pool.Put256(h)
 
@@ -110,7 +104,7 @@ func entryID(e Entry) (Hash, error) {
 	defer sha3pool.Put256(bh)
 	err := serialize(bh, e.Body())
 	if err != nil {
-		return Hash{}, err
+		panic(err) // xxx ok to panic here?
 	}
 	var innerHash Hash
 	bh.Read(innerHash[:])
@@ -119,7 +113,7 @@ func entryID(e Entry) (Hash, error) {
 	var hash Hash
 	h.Read(hash[:])
 
-	return hash, nil
+	return hash
 }
 
 func serializeEntry(w io.Writer, e Entry) error {
@@ -149,10 +143,7 @@ func serialize(w io.Writer, c interface{}) (err error) {
 		_, err = blockchain.WriteVarstr31(w, []byte(v))
 		return errors.Wrapf(err, "writing string (len %d)", len(v))
 	case EntryRef:
-		h, err := v.Hash()
-		if err != nil {
-			return errors.Wrap(err, "getting hash of entryref")
-		}
+		h := v.Hash()
 		_, err = w.Write(h[:])
 		return errors.Wrap(err, "writing entryref hash")
 	}

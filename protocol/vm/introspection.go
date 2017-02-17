@@ -53,10 +53,7 @@ func opCheckOutput(vm *virtualMachine) error {
 	var o *bc.Output
 	hdr := vm.txHeaderRef.Entry.(*bc.Header)
 	for _, resultRef := range hdr.Results() {
-		id, err := resultRef.Hash()
-		if err != nil {
-			// xxx
-		}
+		id := resultRef.Hash()
 		if bytes.Equal(outputID, id[:]) {
 			o = resultRef.Entry.(*bc.Output)
 			break
@@ -255,12 +252,9 @@ func opOutputID(vm *virtualMachine) error {
 		// xxx error
 	}
 	spent := sp.SpentOutput()
-	outID, err := spent.Hash()
-	if err != nil {
-		return err
-	}
+	outID := spent.Hash()
 
-	err = vm.applyCost(1)
+	err := vm.applyCost(1)
 	if err != nil {
 		return err
 	}

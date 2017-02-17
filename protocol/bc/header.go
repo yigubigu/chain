@@ -47,10 +47,7 @@ func (h *Header) Walk(visitor func(*EntryRef) error) error {
 		if e == nil {
 			return nil
 		}
-		h, err := e.Hash()
-		if err != nil {
-			return err
-		}
+		h := e.Hash()
 		if visited[h] {
 			return nil
 		}
@@ -200,18 +197,10 @@ func (h *Header) readTx(r io.Reader) error {
 		if err != nil {
 			return err
 		}
-		hash, err := ref.Hash()
-		if err != nil {
-			return err
-		}
-		entries[hash] = &ref
+		entries[ref.Hash()] = &ref
 	}
 	return h.Walk(func(e *EntryRef) error {
-		hash, err := e.Hash()
-		if err != nil {
-			return err
-		}
-		if other, ok := entries[hash]; ok {
+		if other, ok := entries[e.Hash()]; ok {
 			e.Entry = other.Entry
 		}
 		return nil
