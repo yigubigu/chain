@@ -26,3 +26,27 @@ func NewTransaction(hdrRef *EntryRef) *Transaction {
 	}
 	return tx
 }
+
+func (tx *Transaction) ID() Hash {
+	return tx.Header.Hash()
+}
+
+func (tx *Transaction) Version() uint64 {
+	return tx.Header.Entry.(*Header).Version()
+}
+
+func (tx *Transaction) Data() *EntryRef {
+	return tx.Header.Entry.(*Header).Data()
+}
+
+func (tx *Transaction) MinTimeMS() uint64 {
+	return tx.Header.Entry.(*Header).MinTimeMS()
+}
+
+func (tx *Transaction) MaxTimeMS() uint64 {
+	return tx.Header.Entry.(*Header).MaxTimeMS()
+}
+
+func (tx *Transaction) RefDataHash() Hash {
+	return tx.Header.Entry.(*Header).RefDataHash()
+}
