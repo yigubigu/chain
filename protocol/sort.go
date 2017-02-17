@@ -2,22 +2,20 @@ package protocol
 
 import "chain/protocol/bc"
 
-func topSort(txs []*bc.EntryRef) []*bc.EntryRef {
+func topSort(txs []*bc.Transaction) []*bc.Transaction {
 	if len(txs) == 1 {
 		return txs
 	}
 
-	nodes := make(map[bc.Hash]*bc.EntryRef)
+	nodes := make(map[bc.Hash]*bc.Transaction)
 	for _, tx := range txs {
-		nodes[tx.Hash()] = tx
+		nodes[tx.ID()] = tx
 	}
 
 	incomingEdges := make(map[bc.Hash]int)
 	children := make(map[bc.Hash][]bc.Hash)
 	for node, tx := range nodes {
-		hdr := tx.Entry.(*bc.Header)
-		spends, _ := hdr.Inputs()
-		for _, spRef := range spends {
+		for _, spRef := range tx.Spends {
 			sp := spRef.Entry.(*bc.Spend)
 			spentOutputID := sp.SpentOutput().Hash()
 			if nodes[spentOutputID] != nil {
@@ -60,16 +58,14 @@ func topSort(txs []*bc.EntryRef) []*bc.EntryRef {
 	return l
 }
 
-func isTopSorted(txs []*bc.EntryRef) bool {
+func isTopSorted(txs []*bc.Transaction) bool {
 	exists := make(map[bc.Hash]bool)
 	seen := make(map[bc.Hash]bool)
 	for _, tx := range txs {
-		exists[tx.Hash()] = true
+		exists[tx.ID()] = true
 	}
 	for _, tx := range txs {
-		hdr := tx.Entry.(*bc.Header)
-		spends, _ := hdr.Inputs()
-		for _, spRef := range spends {
+		for _, spRef := range tx.Spends {
 			sp := spRef.Entry.(*bc.Spend)
 			spentOutputID := sp.SpentOutput().Hash() // xxx ignoring errors
 			if exists[spentOutputID] && !seen[spentOutputID] {

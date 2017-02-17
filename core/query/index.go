@@ -76,9 +76,7 @@ func (ind *Indexer) insertAnnotatedTxs(ctx context.Context, b *bc.Block) ([]*Ann
 		outputIDs        = pq.ByteaArray(make([][]byte, 0))
 	)
 	for _, tx := range b.Transactions {
-		hdr := tx.Entry.(*bc.Header)
-		spends, _ := hdr.Inputs()
-		for _, spRef := range spends {
+		for _, spRef := range tx.Spends {
 			sp := spRef.Entry.(*bc.Spend)
 			spentOutputRef := sp.SpentOutput()
 			spentOutputID, err := spentOutputRef.Hash()
@@ -214,15 +212,10 @@ func (ind *Indexer) insertAnnotatedOutputs(ctx context.Context, b *bc.Block, ann
 	)
 
 	for pos, tx := range b.Transactions {
-		hdr := tx.Entry.(*bc.Header)
-		spends, _ := hdr.Inputs()
-		for _, spRef := range spends {
+		for _, spRef := range tx.Spends {
 			sp := spRef.Entry.(*bc.Spend)
 			spentOutputRef := sp.SpentOutput()
-			spentOutputID, err := spentOutputRef.Hash()
-			if err != nil {
-				return err
-			}
+			spentOutputID := spentOutputRef.Hash()
 			prevoutIDs = append(prevoutIDs, spentOutputID.Bytes())
 		}
 

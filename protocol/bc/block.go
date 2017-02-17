@@ -26,7 +26,7 @@ const (
 // and the transactions it contains.
 type Block struct {
 	BlockHeader
-	Transactions []*EntryRef
+	Transactions []*Transaction
 }
 
 // MarshalText fulfills the json.Marshaler interface.

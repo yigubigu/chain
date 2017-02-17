@@ -25,47 +25,28 @@ type (
 	}
 )
 
-func NewBuilder(version, minTimeMS, maxTimeMS uint64, base *EntryRef) *Builder {
+func NewBuilder(version, minTimeMS, maxTimeMS uint64, base *Transaction) *Builder {
 	result := &Builder{
 		h: newHeader(version, nil, nil, minTimeMS, maxTimeMS),
 		m: newMux(nil),
 	}
 	if base != nil {
-		baseHdr := base.Entry.(*Header)
-		entriesByHash := make(map[Hash]*EntryRef)
-		var (
-			spends, issuances, outputs, retirements []*EntryRef
-		)
-		baseHdr.Walk(func(e *EntryRef) error {
-			entriesByHash[e.Hash()] = e
-			switch e.Type() {
-			case typeSpend:
-				spends = append(spends, e)
-			case typeIssuance:
-				issuances = append(issuances, e)
-			case typeOutput:
-				outputs = append(outputs, e)
-			case typeRetirement:
-				retirements = append(retirements, e)
-			}
-			return nil
-		})
-		for _, e := range spends {
-			sp := e.Entry.(*Spend)
+		for _, issRef := range base.Issuances {
+			iss := e.Entry.(*Issuance)
+			result.AddIssuance(iss.Anchor(), AssetAmount{AssetID: iss.AssetID(), Amount: iss.Amount()}, iss.Data())
+		}
+		for _, spRef := range base.Spends {
+			sp := spRef.Entry.(*Spend)
 			spentOutputRef := sp.SpentOutput()
 			spentOutput := spentOutputRef.Entry.(*Output)
 			result.AddSpend(spentOutputRef, AssetAmount{AssetID: spentOutput.AssetID(), Amount: spentOutput.Amount()}, sp.Data())
 		}
-		for _, e := range issuances {
-			iss := e.Entry.(*Issuance)
-			result.AddIssuance(iss.Anchor(), AssetAmount{AssetID: iss.AssetID(), Amount: iss.Amount()}, iss.Data())
-		}
-		for _, e := range outputs {
-			o := e.Entry.(*Output)
+		for _, oRef := range base.Outputs {
+			o := oRef.Entry.(*Output)
 			result.AddOutput(AssetAmount{AssetID: o.AssetID(), Amount: o.Amount()}, o.ControlProgram(), o.Data())
 		}
-		for _, e := range retirements {
-			r := e.Entry.(*Retirement)
+		for _, rRef := range base.Retirements {
+			r := rRef.Entry.(*Retirement)
 			result.AddRetirement(AssetAmount{AssetID: r.AssetID(), Amount: r.Amount()}, r.Data())
 		}
 	}
