@@ -75,10 +75,7 @@ func (g *Generator) Submit(ctx context.Context, tx *bc.EntryRef) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
-	id, err := tx.Hash()
-	if err != nil {
-		return err
-	}
+	id := tx.Hash()
 	if g.poolHashes[id] {
 		return nil
 	}

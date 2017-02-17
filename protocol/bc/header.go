@@ -37,6 +37,10 @@ func (h *Header) Results() []*EntryRef {
 	return h.body.Results
 }
 
+func (h *Header) Data() *EntryRef {
+	return h.body.Data
+}
+
 func (h *Header) RefDataHash() Hash {
 	return refDataHash(h.body.Data)
 }

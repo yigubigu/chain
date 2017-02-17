@@ -33,11 +33,7 @@ func (b *TemplateBuilder) AddSpend(spentOutput *bc.EntryRef, value bc.AssetAmoun
 		}
 	}
 	spRef := b.bcBuilder.AddSpend(spentOutput, value, data)
-	hash, err := spRef.Hash()
-	if err != nil {
-		return err
-	}
-	b.signingInstructions[hash] = sigInstruction
+	b.signingInstructions[spRef.Hash()] = sigInstruction
 	return nil
 }
 
@@ -46,11 +42,7 @@ func (b *TemplateBuilder) AddIssuance(nonce *bc.EntryRef, value bc.AssetAmount, 
 		return errors.WithDetailf(ErrBadAmount, "amount %d exceeds maximum value 2^63", value.Amount)
 	}
 	issRef := b.bcBuilder.AddIssuance(nonce, value, data)
-	hash, err := issRef.Hash()
-	if err != nil {
-		return err
-	}
-	b.signingInstructions[hash] = sigInstruction
+	b.signingInstructions[issRef.Hash()] = sigInstruction
 	return nil
 }
 

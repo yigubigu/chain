@@ -17,10 +17,11 @@ type (
 	}
 
 	Builder struct {
-		h           *Header
-		m           *mux
-		outputs     []*pendingOutput
-		retirements []*pendingRetirement
+		h                 *Header
+		m                 *mux
+		spends, issuances []*EntryRef
+		outputs           []*pendingOutput
+		retirements       []*pendingRetirement
 	}
 )
 
@@ -73,6 +74,7 @@ func NewBuilder(version, minTimeMS, maxTimeMS uint64, base *EntryRef) *Builder {
 
 func (b *Builder) AddIssuance(nonce *EntryRef, value AssetAmount, data *EntryRef) *EntryRef {
 	issRef := &EntryRef{Entry: newIssuance(nonce, value, data)}
+	b.issuances = append(b.issuances, issRef)
 	s := valueSource{
 		Ref:   issRef,
 		Value: value,
@@ -102,6 +104,7 @@ func (b *Builder) AddRetirement(value AssetAmount, data *EntryRef) {
 
 func (b *Builder) AddSpend(spentOutput *EntryRef, value AssetAmount, data *EntryRef) *EntryRef {
 	spRef := &EntryRef{Entry: newSpend(spentOutput, data)}
+	b.spends = append(b.spends, spRef)
 	src := valueSource{
 		Ref:   spRef,
 		Value: value,
@@ -110,9 +113,14 @@ func (b *Builder) AddSpend(spentOutput *EntryRef, value AssetAmount, data *Entry
 	return spRef
 }
 
-func (b *Builder) Build() *Header {
+func (b *Builder) Build() *Transaction {
 	var n uint64
 	muxRef := &EntryRef{Entry: b.m}
+	tx := &Transaction{
+		Header:    &EntryRef{Entry: b.h},
+		Spends:    b.spends,
+		Issuances: b.issuances,
+	}
 	for _, po := range b.outputs {
 		s := valueSource{
 			Ref:      muxRef,
@@ -121,7 +129,9 @@ func (b *Builder) Build() *Header {
 		}
 		n++
 		o := newOutput(s, po.controlProg, po.data)
-		b.h.body.Results = append(b.h.body.Results, &EntryRef{Entry: o})
+		oRef := &EntryRef{Entry: o}
+		b.h.body.Results = append(b.h.body.Results, oRef)
+		tx.Outputs = append(tx.Outputs, oRef)
 	}
 	for _, pr := range b.retirements {
 		s := valueSource{
@@ -131,7 +141,9 @@ func (b *Builder) Build() *Header {
 		}
 		n++
 		r := newRetirement(s, pr.data)
-		b.h.body.Results = append(b.h.body.Results, &EntryRef{Entry: r})
+		rRef := &EntryRef{Entry: r}
+		b.h.body.Results = append(b.h.body.Results, rRef)
+		tx.Retirements = append(tx.Retirements, rRef)
 	}
-	return b.h
+	return tx
 }

@@ -121,11 +121,10 @@ func (b *Bool) UnmarshalJSON(raw []byte) error {
 var emptyJSONObject = json.RawMessage(`{}`)
 
 func buildAnnotatedTransaction(orig *bc.EntryRef, b *bc.Block, indexInBlock uint32) *AnnotatedTx {
-	origID, _ := orig.Hash() // xxx ignoring error
 	hdr := orig.Entry.(*bc.Header)
 	spends, issuances := hdr.Inputs()
 	tx := &AnnotatedTx{
-		ID:            origID,
+		ID:            orig.Hash(),
 		Timestamp:     b.Time(),
 		BlockID:       b.Hash(),
 		BlockHeight:   b.Height,
@@ -155,7 +154,7 @@ func buildAnnotatedSpend(orig *bc.EntryRef) *AnnotatedInput {
 	sp := orig.Entry.(*bc.Spend)
 	spentRef := sp.SpentOutput()
 	spentOutput := spentRef.Entry.(*bc.Output)
-	prevoutID, _ := spentRef.Hash() // xxx ignoring error
+	prevoutID := spentRef.Hash()
 	in := &AnnotatedInput{
 		Type:            "spend",
 		AssetID:         spentOutput.AssetID(),
