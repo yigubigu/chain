@@ -5,7 +5,7 @@ type Output struct {
 		Source         valueSource
 		ControlProgram Program
 		Data           *EntryRef
-		ExtHash        extHash
+		ExtHash        Hash
 	}
 }
 

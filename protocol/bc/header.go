@@ -11,7 +11,7 @@ type Header struct {
 		Results              []*EntryRef
 		Data                 *EntryRef
 		MinTimeMS, MaxTimeMS uint64
-		ExtHash              extHash
+		ExtHash              Hash
 	}
 }
 

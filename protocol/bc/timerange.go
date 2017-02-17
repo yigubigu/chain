@@ -3,7 +3,7 @@ package bc
 type TimeRange struct {
 	body struct {
 		MinTimeMS, MaxTimeMS uint64
-		ExtHash              extHash
+		ExtHash              Hash
 	}
 }
 

@@ -4,7 +4,7 @@ type Retirement struct {
 	body struct {
 		Source  valueSource
 		Data    *EntryRef
-		ExtHash extHash
+		ExtHash Hash
 	}
 }
 

@@ -4,12 +4,12 @@ type Spend struct {
 	body struct {
 		SpentOutput *EntryRef
 		Data        *EntryRef
-		ExtHash     extHash
+		ExtHash     Hash
 	}
 	witness struct {
 		Destination valueDestination
 		Arguments   [][]byte
-		ExtHash     extHash
+		ExtHash     Hash
 	}
 }
 

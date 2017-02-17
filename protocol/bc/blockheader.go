@@ -9,7 +9,7 @@ type blockHeader struct {
 		TransactionsRoot     Hash
 		AssetsRoot           Hash
 		NextConsensusProgram []byte
-		ExtHash              extHash
+		ExtHash              Hash
 	}
 }
 

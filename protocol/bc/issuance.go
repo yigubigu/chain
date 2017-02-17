@@ -5,7 +5,7 @@ type Issuance struct {
 		Anchor  *EntryRef
 		Value   AssetAmount
 		Data    *EntryRef
-		ExtHash extHash
+		ExtHash Hash
 	}
 	witness struct {
 		Destination     valueDestination
@@ -13,7 +13,7 @@ type Issuance struct {
 		AssetDefinition *EntryRef // data entry
 		IssuanceProgram Program
 		Arguments       [][]byte
-		ExtHash         extHash
+		ExtHash         Hash
 	}
 }
 

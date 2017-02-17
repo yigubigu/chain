@@ -4,7 +4,7 @@ type Nonce struct {
 	body struct {
 		Program   Program
 		TimeRange *EntryRef
-		ExtHash   extHash
+		ExtHash   Hash
 	}
 }
 

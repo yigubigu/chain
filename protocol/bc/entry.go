@@ -96,8 +96,6 @@ func (ref *EntryRef) readEntry(r io.Reader) error {
 	return deserialize(r, witness)
 }
 
-type extHash Hash
-
 var errInvalidValue = errors.New("invalid value")
 
 func entryID(e Entry) (Hash, error) {
