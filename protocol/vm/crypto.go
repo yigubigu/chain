@@ -128,7 +128,7 @@ func opCheckMultiSig(vm *virtualMachine) error {
 }
 
 func opTxSigHash(vm *virtualMachine) error {
-	if vm.txHeaderRef == nil {
+	if vm.tx == nil {
 		return ErrContext
 	}
 	err := vm.applyCost(256)
@@ -141,7 +141,7 @@ func opTxSigHash(vm *virtualMachine) error {
 
 	h := vm.input.Hash()
 	hasher.Write(h[:])
-	h = vm.txHeaderRef.Hash()
+	h = vm.tx.ID()
 	hasher.Write(h[:])
 	hasher.Read(h[:])
 	return vm.push(h[:], false)

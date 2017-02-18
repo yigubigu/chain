@@ -12,15 +12,15 @@ import (
 
 // ValidateTxCached checks a cache of prevalidated transactions
 // before attempting to perform a context-free validation of the tx.
-func (c *Chain) ValidateTxCached(hdrRef *bc.EntryRef) error {
+func (c *Chain) ValidateTxCached(tx *bc.Transaction) error {
 	// Consult a cache of prevalidated transactions.
-	hash := hdrRef.Hash()
+	hash := tx.ID()
 	err, ok := c.prevalidated.lookup(hash)
 	if ok {
 		return err
 	}
 
-	err = validation.CheckTxWellFormed(hdrRef)
+	err = validation.CheckTxWellFormed(tx)
 	c.prevalidated.cache(hash, err)
 	return err
 }
@@ -50,7 +50,7 @@ func (c *prevalidatedTxsCache) cache(txID bc.Hash, err error) {
 }
 
 func (c *Chain) checkIssuanceWindow(tx *bc.Transaction) error {
-	for range tx.Issuances() {
+	for range tx.Issuances {
 		// TODO(tessr): consider removing 0 check once we can configure this
 		if c.MaxIssuanceWindow != 0 && tx.MinTimeMS()+bc.DurationMillis(c.MaxIssuanceWindow) < tx.MaxTimeMS() {
 			// xxx should this be checking the iss->Anchor->TimeRange bounds instead?

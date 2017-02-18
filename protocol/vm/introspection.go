@@ -9,7 +9,7 @@ import (
 )
 
 func opCheckOutput(vm *virtualMachine) error {
-	if vm.txHeaderRef == nil {
+	if vm.tx == nil {
 		return ErrContext
 	}
 
@@ -50,9 +50,10 @@ func opCheckOutput(vm *virtualMachine) error {
 	}
 	// xxx check len(outputID)
 
+	// xxx how to handle retirements? they don't have code to check
+
 	var o *bc.Output
-	hdr := vm.txHeaderRef.Entry.(*bc.Header)
-	for _, resultRef := range hdr.Results() {
+	for _, resultRef := range vm.tx.Outputs {
 		id := resultRef.Hash()
 		if bytes.Equal(outputID, id[:]) {
 			o = resultRef.Entry.(*bc.Output)
@@ -87,7 +88,7 @@ func opCheckOutput(vm *virtualMachine) error {
 }
 
 func opAsset(vm *virtualMachine) error {
-	if vm.txHeaderRef == nil {
+	if vm.tx == nil {
 		return ErrContext
 	}
 
@@ -121,7 +122,7 @@ func opAsset(vm *virtualMachine) error {
 }
 
 func opAmount(vm *virtualMachine) error {
-	if vm.txHeaderRef == nil {
+	if vm.tx == nil {
 		return ErrContext
 	}
 
@@ -155,7 +156,7 @@ func opAmount(vm *virtualMachine) error {
 }
 
 func opProgram(vm *virtualMachine) error {
-	if vm.txHeaderRef == nil {
+	if vm.tx == nil {
 		return ErrContext
 	}
 
@@ -168,7 +169,7 @@ func opProgram(vm *virtualMachine) error {
 }
 
 func opMinTime(vm *virtualMachine) error {
-	if vm.txHeaderRef == nil {
+	if vm.tx == nil {
 		return ErrContext
 	}
 
@@ -177,12 +178,11 @@ func opMinTime(vm *virtualMachine) error {
 		return err
 	}
 
-	hdr := vm.txHeaderRef.Entry.(*bc.Header)
-	return vm.pushInt64(int64(hdr.MinTimeMS()), true)
+	return vm.pushInt64(int64(vm.tx.MinTimeMS()), true)
 }
 
 func opMaxTime(vm *virtualMachine) error {
-	if vm.txHeaderRef == nil {
+	if vm.tx == nil {
 		return ErrContext
 	}
 
@@ -191,8 +191,7 @@ func opMaxTime(vm *virtualMachine) error {
 		return err
 	}
 
-	hdr := vm.txHeaderRef.Entry.(*bc.Header)
-	maxTime := hdr.MaxTimeMS()
+	maxTime := vm.tx.MaxTimeMS()
 	if maxTime == 0 || maxTime > math.MaxInt64 {
 		maxTime = uint64(math.MaxInt64)
 	}
@@ -201,7 +200,7 @@ func opMaxTime(vm *virtualMachine) error {
 }
 
 func opRefDataHash(vm *virtualMachine) error {
-	if vm.txHeaderRef == nil {
+	if vm.tx == nil {
 		return ErrContext
 	}
 
@@ -225,7 +224,7 @@ func opRefDataHash(vm *virtualMachine) error {
 }
 
 func opTxRefDataHash(vm *virtualMachine) error {
-	if vm.txHeaderRef == nil {
+	if vm.tx == nil {
 		return ErrContext
 	}
 
@@ -234,13 +233,12 @@ func opTxRefDataHash(vm *virtualMachine) error {
 		return err
 	}
 
-	hdr := vm.txHeaderRef.Entry.(*bc.Header)
-	h := hdr.RefDataHash()
+	h := vm.tx.RefDataHash()
 	return vm.push(h[:], true)
 }
 
 func opOutputID(vm *virtualMachine) error {
-	if vm.txHeaderRef == nil {
+	if vm.tx == nil {
 		return ErrContext
 	}
 
@@ -263,7 +261,7 @@ func opOutputID(vm *virtualMachine) error {
 }
 
 func opNonce(vm *virtualMachine) error {
-	if vm.txHeaderRef == nil {
+	if vm.tx == nil {
 		return ErrContext
 	}
 

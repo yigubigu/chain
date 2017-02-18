@@ -85,12 +85,12 @@ func (b *Block) readFrom(r io.Reader) error {
 			return errors.Wrap(err, "reading number of transactions")
 		}
 		for ; n > 0; n-- {
-			var hdr Header
-			err = hdr.readTx(r)
+			var tx Transaction
+			err = tx.readFrom(r)
 			if err != nil {
 				return errors.Wrapf(err, "reading transaction %d", len(b.Transactions))
 			}
-			b.Transactions = append(b.Transactions, &EntryRef{Entry: &hdr})
+			b.Transactions = append(b.Transactions, &tx)
 		}
 	}
 	return nil
@@ -112,8 +112,8 @@ func (b *Block) writeTo(w io.Writer, serflags uint8) error {
 		if err != nil {
 			return errors.Wrap(err, "writing number of transactions")
 		}
-		for i, ref := range b.Transactions {
-			err = ref.Entry.(*Header).writeTx(w)
+		for i, tx := range b.Transactions {
+			err = tx.writeTo(w)
 			if err != nil {
 				return errors.Wrapf(err, "writing transaction %d", i)
 			}

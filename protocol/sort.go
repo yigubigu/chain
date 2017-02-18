@@ -36,7 +36,7 @@ func topSort(txs []*bc.Transaction) []*bc.Transaction {
 	}
 
 	// https://en.wikipedia.org/wiki/Topological_sorting#Algorithms
-	var l []*bc.EntryRef
+	var l []*bc.Transaction
 	for len(s) > 0 {
 		n := s[0]
 		s = s[1:]
@@ -72,7 +72,7 @@ func isTopSorted(txs []*bc.Transaction) bool {
 				return false
 			}
 		}
-		seen[tx.Hash()] = true
+		seen[tx.ID()] = true
 	}
 	return true
 }

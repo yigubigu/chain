@@ -32,7 +32,7 @@ func NewBuilder(version, minTimeMS, maxTimeMS uint64, base *Transaction) *Builde
 	}
 	if base != nil {
 		for _, issRef := range base.Issuances {
-			iss := e.Entry.(*Issuance)
+			iss := issRef.Entry.(*Issuance)
 			result.AddIssuance(iss.Anchor(), AssetAmount{AssetID: iss.AssetID(), Amount: iss.Amount()}, iss.Data())
 		}
 		for _, spRef := range base.Spends {
