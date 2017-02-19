@@ -10,7 +10,6 @@ import (
 	chainjson "chain/encoding/json"
 	"chain/protocol/bc"
 	"chain/protocol/vm"
-	"chain/protocol/vmutil"
 )
 
 type AnnotatedTx struct {
@@ -123,7 +122,7 @@ var emptyJSONObject = json.RawMessage(`{}`)
 
 func buildAnnotatedTransaction(orig *bc.Transaction, b *bc.Block, indexInBlock uint32) *AnnotatedTx {
 	tx := &AnnotatedTx{
-		ID:            orig.Hash(),
+		ID:            orig.ID(),
 		Timestamp:     b.Time(),
 		BlockID:       b.Hash(),
 		BlockHeight:   b.Height,
@@ -216,7 +215,7 @@ func buildAnnotatedRetirement(outRef *bc.EntryRef) *AnnotatedOutput {
 		AssetDefinition: &emptyJSONObject,
 		AssetTags:       &emptyJSONObject,
 		Amount:          ret.Amount(),
-		ControlProgram:  []byte{vm.OP_FALSE}, // xxx should annotated output preserve the vmversion field?
+		ControlProgram:  []byte{byte(vm.OP_FALSE)}, // xxx should annotated output preserve the vmversion field?
 		ReferenceData:   &emptyJSONObject,
 	}
 }

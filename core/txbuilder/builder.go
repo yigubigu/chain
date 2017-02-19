@@ -9,10 +9,11 @@ import (
 	"chain/protocol/bc"
 )
 
-func NewBuilder(maxTime time.Time, tx *bc.EntryRef) *TemplateBuilder {
+func NewBuilder(maxTime time.Time, tx *bc.Transaction) *TemplateBuilder {
 	return &TemplateBuilder{
-		bcBuilder:           bc.NewBuilder(1, bc.Millis(time.Now()), bc.Millis(maxTime), tx),
+		bcBuilder:           bc.NewBuilder(1, 0, bc.Millis(maxTime), tx), // xxx should the 0 be bc.Millis(time.Now())?
 		signingInstructions: make(map[bc.Hash]*SigningInstruction),
+		isLocal:             tx == nil,
 	}
 }
 
@@ -21,6 +22,7 @@ type TemplateBuilder struct {
 	signingInstructions map[bc.Hash]*SigningInstruction
 	rollbacks           []func()
 	callbacks           []func() error
+	isLocal             bool
 }
 
 func (b *TemplateBuilder) AddSpend(spentOutput *bc.EntryRef, value bc.AssetAmount, data *bc.EntryRef, sigInstruction *SigningInstruction) error {
@@ -63,19 +65,15 @@ func (b *TemplateBuilder) AddRetirement(value bc.AssetAmount, data *bc.EntryRef)
 }
 
 func (b *TemplateBuilder) RestrictMinTime(t time.Time) {
-	if t.After(b.minTime) {
-		b.minTime = t
-	}
+	b.bcBuilder.RestrictMinTimeMS(bc.Millis(t))
 }
 
 func (b *TemplateBuilder) RestrictMaxTime(t time.Time) {
-	if t.Before(b.maxTime) {
-		b.maxTime = t
-	}
+	b.bcBuilder.RestrictMaxTimeMS(bc.Millis(t))
 }
 
 func (b *TemplateBuilder) MaxTime() time.Time {
-	return b.maxTime
+	return time.Unix(int64(b.bcBuilder.MaxTimeMS()), 0) // xxx unsafe typecast
 }
 
 // OnRollback registers a function that can be
@@ -113,7 +111,7 @@ func (b *TemplateBuilder) rollback() {
 	}
 }
 
-func (b *TemplateBuilder) Build() (*Template, *bc.TxData, error) {
+func (b *TemplateBuilder) Build() (*Template, *bc.Transaction, error) {
 	// Run any building callbacks.
 	for _, cb := range b.callbacks {
 		err := cb()
@@ -122,35 +120,21 @@ func (b *TemplateBuilder) Build() (*Template, *bc.TxData, error) {
 		}
 	}
 
-	tpl := &Template{}
-	tx := b.base
-	if tx == nil {
-		tx = &bc.TxData{
-			Version: bc.CurrentTransactionVersion,
-		}
-		tpl.Local = true
+	tx := b.bcBuilder.Build()
+	tpl := &Template{
+		Transaction:         tx,
+		SigningInstructions: b.signingInstructions,
+		Local:               b.isLocal,
 	}
 
-	// Update min & max times.
-	if !b.minTime.IsZero() && bc.Millis(b.minTime) > tx.MinTime {
-		tx.MinTime = bc.Millis(b.minTime)
-	}
-	if tx.MaxTime == 0 || tx.MaxTime > bc.Millis(b.maxTime) {
-		tx.MaxTime = bc.Millis(b.maxTime)
-	}
-
-	// Set transaction reference data if applicable.
-	if len(b.referenceData) > 0 {
-		tx.ReferenceData = b.referenceData
-	}
-
-	// Add all the built outputs.
-	tx.Outputs = append(tx.Outputs, b.outputs...)
+	// xxx Set transaction reference data if applicable.
+	// if len(b.referenceData) > 0 {
+	// 	tx.ReferenceData = b.referenceData
+	// }
 
 	// Add all the built inputs and their corresponding signing instructions.
 	for i, in := range b.inputs {
 		instruction := b.signingInstructions[i]
-		instruction.Position = uint32(len(tx.Inputs))
 
 		// Empty signature arrays should be serialized as empty arrays, not null.
 		if instruction.WitnessComponents == nil {

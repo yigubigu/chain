@@ -53,6 +53,22 @@ func NewBuilder(version, minTimeMS, maxTimeMS uint64, base *Transaction) *Builde
 	return result
 }
 
+func (b *Builder) RestrictMinTimeMS(minTimeMS uint64) {
+	if minTimeMS > b.h.MinTimeMS() {
+		b.h.body.MinTimeMS = minTimeMS
+	}
+}
+
+func (b *Builder) RestrictMaxTimeMS(maxTimeMS uint64) {
+	if maxTimeMS < b.h.MaxTimeMS() {
+		b.h.body.MaxTimeMS = maxTimeMS
+	}
+}
+
+func (b *Builder) MaxTimeMS() uint64 {
+	return b.h.MaxTimeMS()
+}
+
 func (b *Builder) AddIssuance(nonce *EntryRef, value AssetAmount, data *EntryRef) *EntryRef {
 	issRef := &EntryRef{Entry: newIssuance(nonce, value, data)}
 	b.issuances = append(b.issuances, issRef)

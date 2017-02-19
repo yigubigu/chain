@@ -79,10 +79,7 @@ func (ind *Indexer) insertAnnotatedTxs(ctx context.Context, b *bc.Block) ([]*Ann
 		for _, spRef := range tx.Spends {
 			sp := spRef.Entry.(*bc.Spend)
 			spentOutputRef := sp.SpentOutput()
-			spentOutputID, err := spentOutputRef.Hash()
-			if err != nil {
-				return nil, err
-			}
+			spentOutputID := spentOutputRef.Hash()
 			outputIDs = append(outputIDs, spentOutputID.Bytes())
 		}
 	}
@@ -212,6 +209,8 @@ func (ind *Indexer) insertAnnotatedOutputs(ctx context.Context, b *bc.Block, ann
 	)
 
 	for pos, tx := range b.Transactions {
+		txID := tx.ID()
+
 		for _, spRef := range tx.Spends {
 			sp := spRef.Entry.(*bc.Spend)
 			spentOutputRef := sp.SpentOutput()
@@ -224,10 +223,10 @@ func (ind *Indexer) insertAnnotatedOutputs(ctx context.Context, b *bc.Block, ann
 				continue
 			}
 
-			outputIDs = append(outputIDs, out.OutputID.Hash[:])
+			outputIDs = append(outputIDs, out.OutputID[:])
 			outputTxPositions = append(outputTxPositions, uint32(pos))
 			outputIndexes = append(outputIndexes, uint32(outIndex))
-			outputTxHashes = append(outputTxHashes, tx.ID[:])
+			outputTxHashes = append(outputTxHashes, txID[:])
 			outputTypes = append(outputTypes, out.Type)
 			outputPurposes = append(outputPurposes, out.Purpose)
 			outputAssetIDs = append(outputAssetIDs, out.AssetID[:])
