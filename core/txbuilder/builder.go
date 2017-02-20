@@ -120,6 +120,13 @@ func (b *TemplateBuilder) Build() (*Template, *bc.Transaction, error) {
 		}
 	}
 
+	for _, instruction := range b.signingInstructions {
+		// Empty signature arrays should be serialized as empty arrays, not null.
+		if instruction.WitnessComponents == nil {
+			instruction.WitnessComponents = []WitnessComponent{}
+		}
+	}
+
 	tx := b.bcBuilder.Build()
 	tpl := &Template{
 		Transaction:         tx,
@@ -132,17 +139,5 @@ func (b *TemplateBuilder) Build() (*Template, *bc.Transaction, error) {
 	// 	tx.ReferenceData = b.referenceData
 	// }
 
-	// Add all the built inputs and their corresponding signing instructions.
-	for i, in := range b.inputs {
-		instruction := b.signingInstructions[i]
-
-		// Empty signature arrays should be serialized as empty arrays, not null.
-		if instruction.WitnessComponents == nil {
-			instruction.WitnessComponents = []WitnessComponent{}
-		}
-		tpl.SigningInstructions = append(tpl.SigningInstructions, instruction)
-		tx.Inputs = append(tx.Inputs, in)
-	}
-	tpl.Transaction = bc.NewTx(*tx)
 	return tpl, tx, nil
 }

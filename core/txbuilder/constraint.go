@@ -50,7 +50,7 @@ type outpointConstraint bc.Hash
 
 func (o outpointConstraint) code() []byte {
 	builder := vmutil.NewBuilder()
-	builder.AddData(o.Bytes())
+	builder.AddData(o[:])
 	builder.AddOp(vm.OP_OUTPUTID)
 	builder.AddOp(vm.OP_EQUAL)
 	return builder.Program
