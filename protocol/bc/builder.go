@@ -53,6 +53,10 @@ func NewBuilder(version, minTimeMS, maxTimeMS uint64, base *Transaction) *Builde
 	return result
 }
 
+func (b *Builder) SetDataHash(hash Hash) {
+	b.h.body.Data = &EntryRef{Entry: NewData(hash)}
+}
+
 func (b *Builder) RestrictMinTimeMS(minTimeMS uint64) {
 	if minTimeMS > b.h.MinTimeMS() {
 		b.h.body.MinTimeMS = minTimeMS
@@ -108,6 +112,10 @@ func (b *Builder) AddSpend(spentOutput *EntryRef, value AssetAmount, data *Entry
 	}
 	b.m.body.Sources = append(b.m.body.Sources, src)
 	return spRef
+}
+
+func (b *Builder) Data() *EntryRef {
+	return b.h.Data()
 }
 
 func (b *Builder) Build() *Transaction {

@@ -33,6 +33,10 @@ func NewData(hash Hash) *Data {
 	return d
 }
 
+func (d *Data) DataHash() Hash {
+	return d.body
+}
+
 // refDataHash returns the data hash in e, which must be nil or a data
 // entry pointer. If e is nil (or e.IsNil() is true) the result is the
 // hash of the empty string.

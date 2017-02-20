@@ -1,7 +1,6 @@
 package txbuilder
 
 import (
-	"bytes"
 	"math"
 	"time"
 
@@ -94,14 +93,21 @@ func (b *TemplateBuilder) OnBuild(buildFn func() error) {
 }
 
 func (b *TemplateBuilder) setReferenceData(data []byte) error {
-	// if b.base != nil && len(b.base.ReferenceData) != 0 && !bytes.Equal(b.base.ReferenceData, data) {
-	// 	return errors.Wrap(ErrBadRefData)
-	// }
-	// xxx update the following
-	if len(b.referenceData) != 0 && !bytes.Equal(b.referenceData, data) {
+	h := bc.HashData(data)
+	return b.setRefDataHash(h)
+}
+
+func (b *TemplateBuilder) setRefDataHash(hash bc.Hash) error {
+	dataRef := b.bcBuilder.Data()
+	if dataRef != nil {
+		data := dataRef.Entry.(*bc.Data)
+		dHash := data.DataHash()
+		if hash == dHash {
+			return nil
+		}
 		return errors.Wrap(ErrBadRefData)
 	}
-	b.referenceData = data
+	b.bcBuilder.SetDataHash(hash)
 	return nil
 }
 

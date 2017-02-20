@@ -110,7 +110,7 @@ func (m *Manager) indexAccountUTXOs(ctx context.Context, b *bc.Block) error {
 	for i, tx := range b.Transactions {
 		for j, resultRef := range tx.Results() {
 			raw := &rawOutput{
-				txHash: tx.ID(),
+				txHash:   tx.ID(),
 				position: j,
 				outputID: resultRef.Hash(),
 			}
@@ -120,7 +120,7 @@ func (m *Manager) indexAccountUTXOs(ctx context.Context, b *bc.Block) error {
 					AssetID: res.AssetID(),
 					Amount:  res.Amount(),
 				}
-				raw.controlProgram: out.ControlProgram().Code // xxx preserve vmversion?
+				raw.controlProgram = out.ControlProgram().Code // xxx preserve vmversion?
 			case *bc.Retirement:
 				// xxx should this loop include or exclude retirements?
 			}
