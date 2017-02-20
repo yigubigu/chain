@@ -48,7 +48,10 @@ type AnnotatedOutput struct {
 	Purpose       string  `json:"purpose,omitempty"`
 	OutputID      bc.Hash `json:"id"`
 	TransactionID bc.Hash `json:"transaction_id,omitempty"`
-	// Position        uint32             `json:"position"` xxx obsolete
+
+	// Position is the index of this output within its transaction's header's Results list
+	Position uint32 `json:"position"`
+
 	AssetID         bc.AssetID         `json:"asset_id"`
 	AssetAlias      string             `json:"asset_alias,omitempty"`
 	AssetDefinition *json.RawMessage   `json:"asset_definition"`
@@ -65,7 +68,7 @@ type AnnotatedOutput struct {
 
 type SpentOutput struct {
 	TransactionID bc.Hash `json:"transaction_id"`
-	Position      uint32  `json:"position"`
+	OutputID      bc.Hash `json:"id"`
 }
 
 type AnnotatedAccount struct {
@@ -142,12 +145,18 @@ func buildAnnotatedTransaction(orig *bc.Transaction, b *bc.Block, indexInBlock u
 	for _, in := range orig.Issuances {
 		tx.Inputs = append(tx.Inputs, buildAnnotatedIssuance(in))
 	}
-	for _, out := range orig.Outputs {
-		tx.Outputs = append(tx.Outputs, buildAnnotatedOutput(out))
+
+	for i, resultRef := range orig.Results() {
+		var aout *AnnotatedOutput
+		switch res := resultRef.Entry.(type) {
+		case *bc.Output:
+			aout = buildAnnotatedOutput(res, resultRef.Hash(), uint32(i))
+		case *bc.Retirement:
+			aout = buildAnnotatedRetirement(res, resultRef.Hash(), uint32(i))
+		}
+		tx.Outputs = append(tx.Outputs, aout)
 	}
-	for _, out := range orig.Retirement {
-		tx.Outputs = append(tx.Outputs, buildAnnotatedRetirement(out))
-	}
+
 	return tx
 }
 
@@ -168,7 +177,6 @@ func buildAnnotatedSpend(orig *bc.EntryRef) *AnnotatedInput {
 	}
 
 	// xxx how to populate in.ReferenceData? the blockchain no longer stores bare refdata, only its hash
-	// xxx outpoints are obsolete
 
 	return in
 }
@@ -190,12 +198,12 @@ func buildAnnotatedIssuance(orig *bc.EntryRef) *AnnotatedInput {
 	return in
 }
 
-func buildAnnotatedOutput(outRef *bc.EntryRef) *AnnotatedOutput {
-	out := outRef.Entry.(*bc.Output)
+func buildAnnotatedOutput(out *bc.Output, outputID bc.Hash, pos uint32) *AnnotatedOutput {
 	// xxx how to populate ReferenceData? the blockchain no longer stores bare refdata, only its hash
 	return &AnnotatedOutput{
 		Type:            "control",
-		OutputID:        outRef.Hash(),
+		OutputID:        outputID,
+		Position:        pos,
 		AssetID:         out.AssetID(),
 		AssetDefinition: &emptyJSONObject,
 		AssetTags:       &emptyJSONObject,
@@ -205,12 +213,12 @@ func buildAnnotatedOutput(outRef *bc.EntryRef) *AnnotatedOutput {
 	}
 }
 
-func buildAnnotatedRetirement(outRef *bc.EntryRef) *AnnotatedOutput {
-	ret := outRef.Entry.(*bc.Retirement)
+func buildAnnotatedRetirement(ret *bc.Retirement, outputID bc.Hash, pos uint32) *AnnotatedOutput {
 	// xxx how to populate ReferenceData? the blockchain no longer stores bare refdata, only its hash
 	return &AnnotatedOutput{
 		Type:            "retire",
-		OutputID:        outRef.Hash(),
+		OutputID:        outputID,
+		Position:        pos,
 		AssetID:         ret.AssetID(),
 		AssetDefinition: &emptyJSONObject,
 		AssetTags:       &emptyJSONObject,

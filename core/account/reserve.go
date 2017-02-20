@@ -34,8 +34,7 @@ var (
 
 // utxo describes an individual account utxo.
 type utxo struct {
-	bc.Outpoint // TODO(oleg): remove this one
-	OutputID    bc.Hash
+	OutputID bc.Hash
 	bc.AssetAmount
 	ControlProgram []byte
 
@@ -381,18 +380,14 @@ func (sr *sourceReserver) refillCache(ctx context.Context) error {
 
 func findMatchingUTXOs(ctx context.Context, db pg.DB, src source, height uint64) ([]*utxo, error) {
 	const q = `
-		SELECT tx_hash, index, output_id, amount, control_program_index, control_program
+		SELECT tx_hash, output_id, amount, control_program_index, control_program
 		FROM account_utxos
 		WHERE account_id = $1 AND asset_id = $2 AND confirmed_in > $3
 	`
 	var utxos []*utxo
 	err := pg.ForQueryRows(ctx, db, q, src.AccountID, src.AssetID, height,
-		func(txHash bc.Hash, index uint32, oid bc.Hash, amount uint64, cpIndex uint64, controlProg []byte) {
+		func(txHash bc.Hash, oid bc.Hash, amount uint64, cpIndex uint64, controlProg []byte) {
 			utxos = append(utxos, &utxo{
-				Outpoint: bc.Outpoint{
-					Hash:  txHash,
-					Index: index,
-				},
 				OutputID: oid,
 				AssetAmount: bc.AssetAmount{
 					Amount:  amount,
@@ -416,7 +411,6 @@ func findSpecificUTXO(ctx context.Context, db pg.DB, out bc.Hash) (*utxo, error)
 		WHERE output_id = $1
 	`
 	u := new(utxo)
-	// TODO(oleg): maybe we need to scan txid:index too from here...
 	err := db.QueryRow(ctx, q, out).Scan(&u.AccountID, &u.AssetID, &u.Amount, &u.ControlProgramIndex, &u.ControlProgram)
 	if err == sql.ErrNoRows {
 		return nil, pg.ErrUserInputNotFound

@@ -37,6 +37,10 @@ func (tx *Transaction) ID() Hash {
 	return tx.Header.Hash()
 }
 
+func (tx *Transaction) Results() []*EntryRef {
+	return tx.Header.Entry.(*Header).Results()
+}
+
 func (tx *Transaction) Version() uint64 {
 	return tx.Header.Entry.(*Header).Version()
 }

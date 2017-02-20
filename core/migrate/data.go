@@ -29,4 +29,10 @@ var migrations = []migration{
 		ALTER TABLE annotated_assets ALTER COLUMN alias SET NOT NULL;
 		ALTER TABLE annotated_accounts ALTER COLUMN alias SET NOT NULL;
 	`},
+	{Name: "2017-02-20.0.core.drop-account_utxo-index.sql", SQL: `
+		ALTER TABLE account_utxos DROP CONSTRAINT account_utxos_pkey;
+		ALTER TABLE account_utxos DROP CONSTRAINT account_utxos_output_id_key;
+		ALTER TABLE account_utxos ADD CONSTRAINT account_utxos_pkey PRIMARY KEY (output_id);
+		ALTER TABLE account_utxos DROP index;
+	`},
 }
